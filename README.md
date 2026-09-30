@@ -4,6 +4,8 @@ A fast, minimal local music player for Omarchy. Your filesystem is your music
 library: open Crate, dig through your folders, build a queue, and get back to
 work. No import or account is needed.
 
+![Crate browsing an album while a track plays](preview.png)
+
 ## Dig → Queue → Play
 
 - **Dig:** Browse `~/Music` by folder or press `/` to search names and paths
