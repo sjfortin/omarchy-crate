@@ -75,6 +75,7 @@ same record mark appears in the bar and browser, colored by the active theme.
 | --- | --- |
 | `1` / `2` | Dig / Queue |
 | `↑` / `↓` or `j` / `k` | Move selection |
+| `Shift+j` / `Shift+k` in Dig | Jump to the next letter / start of this or the previous letter group |
 | `←` / `h` | Parent folder |
 | `→` / `l` | Open selected folder |
 | `Enter` | Open folder or play the selected track's folder |
@@ -82,7 +83,7 @@ same record mark appears in the bar and browser, colored by the active theme.
 | `/` | Search the collection |
 | `q` / `Shift+q` | Queue selection / play it next |
 | `Space` | Play or pause |
-| `Shift+j` / `Shift+k` or `Ctrl+↓` / `Ctrl+↑` | Move selected queue item down / up |
+| `Shift+j` / `Shift+k` or `Ctrl+↓` / `Ctrl+↑` in Queue | Move selected queue item down / up |
 | `Delete` / `Backspace` | Remove selected queue item |
 | `?` | Shortcut help |
 

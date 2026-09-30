@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "sjfortin.crate",
   "name": "Crate",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "author": "Sam Fortin",
   "license": "MIT",
   "homepage": "https://github.com/sjfortin/omarchy-crate",

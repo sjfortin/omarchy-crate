@@ -163,6 +163,33 @@ Item {
     if (page === "queue" && queueList.count) queueList.positionViewAtIndex(cursor, ListView.Contain)
   }
 
+  function entryInitial(index) {
+    var entry = visibleEntries[index]
+    var name = entry ? String(entry.name || "").trim() : ""
+    return name ? name.charAt(0).toUpperCase() : "#"
+  }
+
+  function jumpLetter(delta) {
+    if (page !== "files" || !visibleEntries.length) return
+    var selected = Math.max(0, Math.min(cursor, visibleEntries.length - 1))
+    var initial = entryInitial(selected)
+    var target = selected
+    if (delta > 0) {
+      for (var next = selected + 1; next < visibleEntries.length; next++) {
+        if (entryInitial(next) !== initial) { target = next; break }
+      }
+    } else {
+      while (target > 0 && entryInitial(target - 1) === initial) target--
+      if (target === selected && target > 0) {
+        initial = entryInitial(target - 1)
+        target--
+        while (target > 0 && entryInitial(target - 1) === initial) target--
+      }
+    }
+    cursor = target
+    if (fileList.count) fileList.positionViewAtIndex(cursor, ListView.Contain)
+  }
+
   function moveQueueSelection(delta) {
     if (!service || page !== "queue" || cursor < 0) return
     var target = cursor + delta
@@ -271,6 +298,10 @@ Item {
                  ((event.key === Qt.Key_K && (event.modifiers & Qt.ShiftModifier)) ||
                   (event.key === Qt.Key_Up && (event.modifiers & Qt.ControlModifier))))
           root.moveQueueSelection(-1)
+        else if (root.page === "files" && event.key === Qt.Key_J && (event.modifiers & Qt.ShiftModifier))
+          root.jumpLetter(1)
+        else if (root.page === "files" && event.key === Qt.Key_K && (event.modifiers & Qt.ShiftModifier))
+          root.jumpLetter(-1)
         else if (event.key === Qt.Key_Down || event.key === Qt.Key_J) root.moveCursor(1)
         else if (event.key === Qt.Key_Up || event.key === Qt.Key_K) root.moveCursor(-1)
         else if ((event.key === Qt.Key_Left || event.key === Qt.Key_H) && root.page === "files")
@@ -833,14 +864,14 @@ Item {
         Rectangle {
           anchors.centerIn: parent
           width: Math.min(parent.width - Style.space(60), Style.space(440))
-          height: Style.space(335)
+          height: Style.space(355)
           color: root.paper
           border.width: 1
           border.color: root.ink
           Text {
             anchors.fill: parent
             anchors.margins: Style.space(20)
-            text: "KEYBOARD\n\n↑ / ↓ or J / K   Move\n← / H   Parent folder\n→ / L   Open selected folder\nENTER   Open or play\nESC   Clear search / parent / close\n/   Search\nQ   Queue track or folder\nSHIFT+Q   Play next\n1 / 2   Dig / Queue\nSPACE   Play or pause\nSHIFT+J/K or CTRL+↓/↑   Reorder queue\nDELETE / BACKSPACE   Remove queue item"
+            text: "KEYBOARD\n\n↑ / ↓ or J / K   Move\nSHIFT+J/K   Next / previous letter in Dig\n← / H   Parent folder\n→ / L   Open selected folder\nENTER   Open or play\nESC   Clear search / parent / close\n/   Search\nQ   Queue track or folder\nSHIFT+Q   Play next\n1 / 2   Dig / Queue\nSPACE   Play or pause\nSHIFT+J/K or CTRL+↓/↑   Reorder queue\nDELETE / BACKSPACE   Remove queue item"
             color: root.ink
             font.family: Style.font.family
             font.pixelSize: Style.font.bodySmall
