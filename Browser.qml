@@ -15,7 +15,7 @@ Item {
   property bool helpOpen: false
   readonly property bool searching: searchInput.text.trim() !== ""
   readonly property var visibleEntries: service
-    ? (searching ? service.searchResults : service.entries) : []
+    ? (searching ? service.searchResults : (service.directoryLoading ? [] : service.entries)) : []
 
   readonly property string pluginId: manifest && manifest.id
     ? String(manifest.id) : "sjfortin.crate"
@@ -25,9 +25,30 @@ Item {
   readonly property color ruleColor: Util.alpha(ink, 0.2)
   readonly property bool typing: searchInput.activeFocus
 
+  function restoreKeyboardFocus() {
+    if (!opened || !window.visible) return
+    if (typeof window.requestActivate === "function") window.requestActivate()
+    keyScope.forceActiveFocus()
+  }
+
+  function openDirectory(path) {
+    if (!service) return
+    searchDelay.stop()
+    searchInput.text = ""
+    service.search("")
+    service.browse(path)
+    cursor = 0
+    Qt.callLater(root.restoreKeyboardFocus)
+  }
+
   function open(payloadJson) {
     closingFromHost = false
     opened = true
+    helpOpen = false
+    cursor = 0
+    searchDelay.stop()
+    searchInput.text = ""
+    if (service) service.search("")
     window.visible = true
     if (payloadJson) {
       try {
@@ -37,13 +58,14 @@ Item {
       } catch (e) {}
     }
     if (service && !service.directory && !service.directoryLoading) service.browse("")
-    Qt.callLater(function() { keyScope.forceActiveFocus() })
+    focusTimer.restart()
   }
 
   function close() {
     closingFromHost = true
     opened = false
     window.visible = false
+    focusTimer.stop()
     closingFromHost = false
   }
 
@@ -55,7 +77,7 @@ Item {
   function navigate(target) {
     page = target
     cursor = 0
-    keyScope.forceActiveFocus()
+    Qt.callLater(root.restoreKeyboardFocus)
   }
 
   function selectionLength() {
@@ -78,10 +100,7 @@ Item {
     if (page === "files") {
       var entry = visibleEntries[cursor]
       if (!entry) return
-      if (entry.kind === "folder") {
-        searchInput.text = ""
-        service.browse(entry.path); cursor = 0
-      }
+      if (entry.kind === "folder") openDirectory(entry.path)
       else playTrackAlbum(entry.path)
     } else service.playAt(cursor)
   }
@@ -112,6 +131,12 @@ Item {
     }
   }
 
+  Timer {
+    id: focusTimer
+    interval: 80
+    onTriggered: root.restoreKeyboardFocus()
+  }
+
   FloatingWindow {
     id: window
     title: "Crate"
@@ -122,7 +147,11 @@ Item {
     minimumSize: Qt.size(680, 480)
 
     onVisibleChanged: {
-      if (visible || root.closingFromHost) return
+      if (visible) {
+        if (root.opened) focusTimer.restart()
+        return
+      }
+      if (root.closingFromHost) return
       root.opened = false
       if (root.shell && typeof root.shell.hide === "function") root.shell.hide(root.pluginId)
     }
@@ -141,9 +170,15 @@ Item {
         if (event.key === Qt.Key_Escape) {
           if (root.searching) searchInput.text = ""
           else if (root.page === "files" && root.service && root.service.parentDirectory)
-            root.service.browse(root.service.parentDirectory)
+            root.openDirectory(root.service.parentDirectory)
           else root.requestClose()
           root.cursor = 0
+          event.accepted = true
+          return
+        }
+        if (event.text === "?" || event.key === Qt.Key_Question
+            || (event.key === Qt.Key_Slash && event.modifiers & Qt.ShiftModifier)) {
+          root.helpOpen = true
           event.accepted = true
           return
         }
@@ -152,7 +187,7 @@ Item {
         else if (event.key === Qt.Key_Up || event.key === Qt.Key_K) root.moveCursor(-1)
         else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) root.activateCursor()
         else if (event.key === Qt.Key_Backspace && root.page === "files" && root.service)
-          { root.service.browse(root.service.parentDirectory); root.cursor = 0 }
+          { root.openDirectory(root.service.parentDirectory) }
         else if (event.key === Qt.Key_Space && root.service) root.service.togglePlayback()
         else if (event.key === Qt.Key_Q) root.queueSelected((event.modifiers & Qt.ShiftModifier) !== 0)
         else if (event.key === Qt.Key_Slash && !(event.modifiers & Qt.ShiftModifier))
@@ -161,8 +196,6 @@ Item {
           root.service.removeQueueAt(root.cursor)
         else if (event.key === Qt.Key_1) root.navigate("files")
         else if (event.key === Qt.Key_2) root.navigate("queue")
-        else if (event.key === Qt.Key_Question || (event.key === Qt.Key_Slash && event.modifiers & Qt.ShiftModifier))
-          root.helpOpen = true
         else return
         event.accepted = true
       }
@@ -355,7 +388,11 @@ Item {
                   onTextChanged: { root.cursor = 0; searchDelay.restart() }
                   Keys.onPressed: function(event) {
                     if (event.key === Qt.Key_Escape) {
-                      text = ""; keyScope.forceActiveFocus(); event.accepted = true
+                      text = ""; if (root.service) root.service.search("")
+                      root.restoreKeyboardFocus(); event.accepted = true
+                    } else if (event.text === "?" || event.key === Qt.Key_Question
+                               || (event.key === Qt.Key_Slash && event.modifiers & Qt.ShiftModifier)) {
+                      root.helpOpen = true; root.restoreKeyboardFocus(); event.accepted = true
                     } else if (event.key === Qt.Key_Down) {
                       keyScope.forceActiveFocus(); root.moveCursor(1); event.accepted = true
                     } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
@@ -373,12 +410,13 @@ Item {
               Text {
                 visible: root.service && (root.searching
                   ? (root.service.searchLoading || root.service.searchError || root.service.searchTruncated)
-                  : (root.service.directoryError || root.service.truncated))
+                  : (root.service.directoryLoading || root.service.directoryError || root.service.truncated))
                 width: parent.width
                 text: root.service ? (root.searching
                   ? (root.service.searchError || (root.service.searchLoading ? "Searching…"
                     : "Showing first 100 matches"))
-                  : (root.service.directoryError || "Showing first 5,000 items")) : ""
+                  : (root.service.directoryError || (root.service.directoryLoading ? "Opening folder…"
+                    : "Showing first 5,000 items"))) : ""
                 color: root.dimInk
                 font.family: Style.font.family
                 font.pixelSize: Style.font.bodySmall
@@ -440,6 +478,11 @@ Item {
                       visible: fileRow.modelData.kind === "folder"
                       onActivated: root.service.playFolder(fileRow.modelData.path)
                     }
+                    Action {
+                      label: "OPEN"
+                      visible: fileRow.modelData.kind === "folder"
+                      onActivated: root.openDirectory(fileRow.modelData.path)
+                    }
                   }
 
                   HoverHandler { id: fileHover }
@@ -452,11 +495,9 @@ Item {
                     onClicked: {
                       root.cursor = fileRow.index
                       if (fileRow.modelData.kind === "folder") {
-                        searchInput.text = ""
-                        root.service.browse(fileRow.modelData.path)
-                        root.cursor = 0
+                        root.openDirectory(fileRow.modelData.path)
                       } else root.playTrackAlbum(fileRow.modelData.path)
-                      keyScope.forceActiveFocus()
+                      root.restoreKeyboardFocus()
                     }
                   }
                 }
@@ -693,7 +734,7 @@ Item {
       anchors.fill: parent
       enabled: action.enabled
       cursorShape: Qt.PointingHandCursor
-      onClicked: action.activated()
+      onClicked: { action.activated(); Qt.callLater(root.restoreKeyboardFocus) }
     }
   }
 }

@@ -9,7 +9,9 @@ work. No import or account is needed.
 - **Dig:** Browse `~/Music` by folder or press `/` to search names and paths
   across your collection. Search matches tracks and folders, including artist
   and album names when they appear in the path. Fuzzy matches help with partial
-  names. Change the root in the bar widget's **Music folder** setting.
+  names. Search for an artist such as Radiohead, then click the folder result
+  or its **OPEN** button to see the albums. Change the root in the bar widget's
+  **Music folder** setting.
 - **Queue:** Add a track or a whole folder (including its subfolders), play it
   next, reorder or remove items, clear the queue, or shuffle what comes next.
 - **Play:** Use previous, play/pause, next, seek, volume, and repeat off/all/one.
@@ -52,6 +54,17 @@ omarchy-shell crate open
 Click **CRATE** in the bar to open it; middle-click to play or pause, and scroll
 to change volume.
 
+To show Crate in Omarchy's **Apps** menu, run:
+
+```bash
+~/.config/omarchy/plugins/sjfortin.crate/desktop/install-app.sh
+```
+
+Open Apps with **Super+Alt+Space**, or open the Omarchy menu with **Super+Space**
+and choose Apps. **Super+Shift+Space** toggles the top bar in the default
+Omarchy bindings. The app entry only opens the enabled plugin; it does not
+install a separate player.
+
 ## Keyboard
 
 | Key | Action |
@@ -84,6 +97,9 @@ the browsing and listening flow is solid.
 To turn it off, run `omarchy plugin disable sjfortin.crate`. For a Git-installed
 plugin, `omarchy plugin remove sjfortin.crate` removes plugin files. Saved queue
 data remains in the state directory for you to keep or delete.
+The optional Apps entry can be removed with
+`~/.config/omarchy/plugins/sjfortin.crate/desktop/install-app.sh --remove`
+before removing the plugin.
 
 ## Contribute
 
@@ -91,6 +107,7 @@ data remains in the state directory for you to keep or delete.
 the Dig and Queue window; `BarWidget.qml` provides bar controls.
 `scripts/browse.py` reads folders, searches paths, and collects folder tracks
 without leaving the configured music root.
+`desktop/` contains the optional Apps launcher entry.
 
 Run these checks after changes:
 

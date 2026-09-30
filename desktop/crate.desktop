@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Crate
+GenericName=Local Music Player
+Comment=Dig through local music and build a listening queue
+Exec=omarchy-shell crate open
+Icon=audio-x-generic
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+Keywords=crate;music;audio;local;player;queue;
+StartupNotify=false

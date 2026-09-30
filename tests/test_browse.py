@@ -42,6 +42,18 @@ class BrowseTests(unittest.TestCase):
             self.assertIn("Boards of Canada", paths)
             self.assertEqual(search_music(directory, "roygbiv")["entries"][0]["name"], "Roygbiv.mp3")
 
+    def test_artist_search_puts_openable_directory_first(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artist = Path(directory) / "Radiohead"
+            album = artist / "In Rainbows"
+            album.mkdir(parents=True)
+            (album / "01 15 Step.mp3").touch()
+            result = search_music(directory, "radiohead")
+            self.assertEqual(result["entries"][0]["kind"], "folder")
+            self.assertEqual(result["entries"][0]["path"], str(artist))
+            self.assertEqual([entry["name"] for entry in list_folder(directory, str(artist))["entries"]],
+                             ["In Rainbows"])
+
     def test_folder_queue_is_recursive_and_stays_in_root(self):
         with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
             root = Path(directory)

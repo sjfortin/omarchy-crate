@@ -2,9 +2,10 @@
   "schemaVersion": 1,
   "id": "sjfortin.crate",
   "name": "Crate",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "Sam Fortin",
   "license": "MIT",
+  "homepage": "https://github.com/sjfortin/omarchy-crate",
   "description": "A fast, minimal local music player for Omarchy. Dig through folders, search, and build a listening queue.",
   "kinds": ["service", "bar-widget", "overlay"],
   "entryPoints": {
