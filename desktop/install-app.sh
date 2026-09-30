@@ -9,6 +9,21 @@ apps_dir="$data_home/applications"
 icons_dir="$data_home/icons/hicolor/scalable/apps"
 entry="$apps_dir/crate.desktop"
 icon="$icons_dir/crate.svg"
+entry_source="$here/crate.desktop"
+icon_source="$here/../assets/crate.svg"
+
+# Only replace or remove files that still match the ones shipped with Crate.
+# In particular, never follow a same-named symlink into another app's files.
+is_ours() {
+  [[ -f $2 && ! -L $2 ]] && cmp -s -- "$1" "$2"
+}
+
+check_destination() {
+  if [[ -e $2 || -L $2 ]] && ! is_ours "$1" "$2"; then
+    printf 'Refusing to overwrite %s: it does not match Crate\x27s file.\n' "$2" >&2
+    exit 1
+  fi
+}
 
 refresh() {
   if command -v update-desktop-database >/dev/null 2>&1; then
@@ -20,14 +35,21 @@ refresh() {
 }
 
 if [[ ${1:-} == "--remove" ]]; then
-  rm -f -- "$entry" "$icon"
+  if is_ours "$entry_source" "$entry"; then
+    rm -- "$entry"
+  fi
+  if is_ours "$icon_source" "$icon"; then
+    rm -- "$icon"
+  fi
   refresh
-  echo "Removed the Crate app entry."
+  echo "Removed matching Crate launcher files; left any other files in place."
   exit 0
 fi
 
+check_destination "$entry_source" "$entry"
+check_destination "$icon_source" "$icon"
 mkdir -p -- "$apps_dir" "$icons_dir"
-install -m 644 -- "$here/crate.desktop" "$entry"
-install -m 644 -- "$here/../assets/crate.svg" "$icon"
+install -m 644 -- "$entry_source" "$entry"
+install -m 644 -- "$icon_source" "$icon"
 refresh
 echo "Installed $entry and $icon"
