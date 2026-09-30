@@ -16,6 +16,7 @@ Item {
   readonly property bool searching: searchInput.text.trim() !== ""
   readonly property var visibleEntries: service
     ? (searching ? service.searchResults : (service.directoryLoading ? [] : service.entries)) : []
+  readonly property var breadcrumbs: buildBreadcrumbs()
 
   readonly property string pluginId: manifest && manifest.id
     ? String(manifest.id) : "sjfortin.crate"
@@ -23,6 +24,26 @@ Item {
   readonly property color paper: Color.background
   readonly property color dimInk: Util.alpha(ink, 0.58)
   readonly property color ruleColor: Util.alpha(ink, 0.2)
+
+  function buildBreadcrumbs() {
+    if (!service) return []
+    var base = String(service.rootDirectory || "")
+    var current = String(service.directory || "")
+    var configured = String(service.musicRoot || "~/Music").split("/").filter(function(part) { return part !== "" })
+    var label = configured.length ? configured[configured.length - 1] : "/"
+    var items = [{ label: label, path: base }]
+    if (!base || !current || (current !== base && current.indexOf(base.replace(/\/$/, "") + "/") !== 0))
+      return items
+    var relative = current.slice(base.length).replace(/^\/+/, "")
+    if (!relative) return items
+    var path = base.replace(/\/$/, "")
+    var parts = relative.split("/")
+    for (var i = 0; i < parts.length; i++) {
+      path += "/" + parts[i]
+      items.push({ label: parts[i], path: path })
+    }
+    return items
+  }
 
   function restoreKeyboardFocus() {
     if (!opened || !window.visible) return
@@ -350,17 +371,59 @@ Item {
                 Action {
                   label: "← UP"
                   enabled: root.service && root.service.parentDirectory !== ""
-                  onActivated: { root.service.browse(root.service.parentDirectory); root.cursor = 0 }
+                  onActivated: root.openDirectory(root.service.parentDirectory)
                 }
-                Text {
+                Flickable {
+                  id: breadcrumbStrip
                   width: Math.max(100, parent.width - Style.space(250))
-                  anchors.verticalCenter: parent.verticalCenter
-                  text: root.service ? root.service.directory || root.service.musicRoot : ""
-                  textFormat: Text.PlainText
-                  color: root.ink
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.bodySmall
-                  elide: Text.ElideMiddle
+                  height: parent.height
+                  contentWidth: breadcrumbTrail.implicitWidth
+                  contentHeight: height
+                  flickableDirection: Flickable.HorizontalFlick
+                  boundsBehavior: Flickable.StopAtBounds
+                  clip: true
+                  onContentWidthChanged: Qt.callLater(function() {
+                    breadcrumbStrip.contentX = Math.max(0, breadcrumbStrip.contentWidth - breadcrumbStrip.width)
+                  })
+
+                  Row {
+                    id: breadcrumbTrail
+                    height: breadcrumbStrip.height
+                    spacing: Style.space(5)
+                    Repeater {
+                      model: root.breadcrumbs
+                      delegate: Row {
+                        id: crumb
+                        required property var modelData
+                        required property int index
+                        height: breadcrumbTrail.height
+                        spacing: Style.space(5)
+                        Text {
+                          anchors.verticalCenter: parent.verticalCenter
+                          text: crumb.modelData.label
+                          textFormat: Text.PlainText
+                          color: crumbHover.hovered ? root.ink : root.dimInk
+                          font.family: Style.font.family
+                          font.pixelSize: Style.font.bodySmall
+                          font.bold: crumb.index === root.breadcrumbs.length - 1
+                          HoverHandler { id: crumbHover }
+                          MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.openDirectory(crumb.modelData.path)
+                          }
+                        }
+                        Text {
+                          anchors.verticalCenter: parent.verticalCenter
+                          visible: crumb.index < root.breadcrumbs.length - 1
+                          text: "/"
+                          color: root.dimInk
+                          font.family: Style.font.family
+                          font.pixelSize: Style.font.bodySmall
+                        }
+                      }
+                    }
+                  }
                 }
                 Action { label: "REFRESH"; onActivated: if (root.service) root.service.refresh() }
               }

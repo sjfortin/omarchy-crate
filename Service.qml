@@ -29,6 +29,7 @@ Item {
   }
 
   property string musicRoot: "~/Music"
+  property string rootDirectory: ""
   property string directory: ""
   property string parentDirectory: ""
   property var entries: []
@@ -87,6 +88,9 @@ Item {
     var wanted = String(path || "~/Music").trim() || "~/Music"
     if (wanted === musicRoot) return
     musicRoot = wanted
+    rootDirectory = ""
+    directory = ""
+    parentDirectory = ""
     browse("")
   }
 
@@ -429,6 +433,7 @@ Item {
         root.entries = Array.isArray(result.entries) ? result.entries : []
         root.truncated = result.truncated === true
         if (!root.directoryError) {
+          root.rootDirectory = String(result.root || "")
           root.directory = String(result.path || "")
           root.parentDirectory = String(result.parent || "")
           root.saveState()

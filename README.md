@@ -22,6 +22,9 @@ Click a track to play its containing folder in order, starting at that track.
 On a folder row, click **PLAY** to play the whole folder; click its name to
 open it and keep digging. Playing a folder replaces the current queue. Use
 **+ QUEUE** or **NEXT** when you want to keep what is already queued.
+The path above the file list is a set of breadcrumbs: click any folder name
+there to jump back to it. Drag the path sideways when it is wider than the
+window.
 
 The queue, current track, playback position, and last browsed directory are
 saved under `~/.local/state/omarchy/crate/state.json` (or
