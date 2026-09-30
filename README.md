@@ -66,7 +66,8 @@ To show Crate in Omarchy's **Apps** menu, run:
 Open Apps with **Super+Alt+Space**, or open the Omarchy menu with **Super+Space**
 and choose Apps. **Super+Shift+Space** toggles the top bar in the default
 Omarchy bindings. The app entry only opens the enabled plugin; it does not
-install a separate player.
+install a separate player. The launcher icon lives at `assets/crate.svg`; the
+same record mark appears in the bar and browser, colored by the active theme.
 
 ## Keyboard
 
@@ -81,8 +82,11 @@ install a separate player.
 | `/` | Search the collection |
 | `q` / `Shift+q` | Queue selection / play it next |
 | `Space` | Play or pause |
-| `Delete` | Remove selected queue item |
+| `Shift+j` / `Shift+k` or `Ctrl+↓` / `Ctrl+↑` | Move selected queue item down / up |
+| `Delete` / `Backspace` | Remove selected queue item |
 | `?` | Shortcut help |
+
+**CLEAR OTHERS** removes every queued track except the current one, which keeps playing.
 
 While typing a search, press `↓` or `Tab` to move focus to the results. `1`,
 `2`, and `?` also work directly from the search field. Returning to Dig keeps

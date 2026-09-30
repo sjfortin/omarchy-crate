@@ -163,6 +163,22 @@ Item {
     if (page === "queue" && queueList.count) queueList.positionViewAtIndex(cursor, ListView.Contain)
   }
 
+  function moveQueueSelection(delta) {
+    if (!service || page !== "queue" || cursor < 0) return
+    var target = cursor + delta
+    if (target < 0 || target >= service.queue.length) return
+    service.moveQueue(cursor, delta)
+    cursor = target
+    if (queueList.count) queueList.positionViewAtIndex(cursor, ListView.Contain)
+  }
+
+  function removeQueueSelection() {
+    if (!service || page !== "queue" || cursor < 0 || cursor >= service.queue.length) return
+    service.removeQueueAt(cursor)
+    cursor = Math.max(0, Math.min(cursor, service.queue.length - 1))
+    if (queueList.count) queueList.positionViewAtIndex(cursor, ListView.Contain)
+  }
+
   function queueSelected(next) {
     if (!service || cursor < 0) return
     if (page === "files") {
@@ -247,7 +263,15 @@ Item {
           event.accepted = true
           return
         }
-        if (event.key === Qt.Key_Down || event.key === Qt.Key_J) root.moveCursor(1)
+        if (root.page === "queue" &&
+            ((event.key === Qt.Key_J && (event.modifiers & Qt.ShiftModifier)) ||
+             (event.key === Qt.Key_Down && (event.modifiers & Qt.ControlModifier))))
+          root.moveQueueSelection(1)
+        else if (root.page === "queue" &&
+                 ((event.key === Qt.Key_K && (event.modifiers & Qt.ShiftModifier)) ||
+                  (event.key === Qt.Key_Up && (event.modifiers & Qt.ControlModifier))))
+          root.moveQueueSelection(-1)
+        else if (event.key === Qt.Key_Down || event.key === Qt.Key_J) root.moveCursor(1)
         else if (event.key === Qt.Key_Up || event.key === Qt.Key_K) root.moveCursor(-1)
         else if ((event.key === Qt.Key_Left || event.key === Qt.Key_H) && root.page === "files")
           root.goParent()
@@ -260,8 +284,8 @@ Item {
         else if (event.key === Qt.Key_Q) root.queueSelected((event.modifiers & Qt.ShiftModifier) !== 0)
         else if (event.key === Qt.Key_Slash && !(event.modifiers & Qt.ShiftModifier))
           { root.navigate("files"); searchInput.forceActiveFocus() }
-        else if (event.key === Qt.Key_Delete && root.page === "queue" && root.service)
-          root.service.removeQueueAt(root.cursor)
+        else if ((event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) && root.page === "queue")
+          root.removeQueueSelection()
         else if (event.key === Qt.Key_1) root.navigate("files")
         else if (event.key === Qt.Key_2) root.navigate("queue")
         else return
@@ -283,13 +307,13 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             spacing: Style.space(12)
 
-            Rectangle {
+            CrateMark {
               anchors.verticalCenter: parent.verticalCenter
-              width: Style.space(10)
+              width: Style.space(21)
               height: width
-              color: root.service && root.service.playing ? root.ink : "transparent"
-              border.width: 1
-              border.color: root.ink
+              ink: root.ink
+              paper: root.paper
+              opacity: root.service && root.service.playing ? 1 : 0.72
             }
             Text {
               anchors.verticalCenter: parent.verticalCenter
@@ -664,7 +688,7 @@ Item {
                   label: root.service ? "REPEAT " + root.service.repeatMode.toUpperCase() : "REPEAT OFF"
                   onActivated: if (root.service) root.service.cycleRepeat()
                 }
-                Action { label: "CLEAR"; onActivated: if (root.service) root.service.clearQueue() }
+                Action { label: "CLEAR OTHERS"; onActivated: if (root.service) root.service.clearQueue() }
               }
               Rectangle { width: parent.width; height: 1; color: root.ruleColor }
               ListView {
@@ -809,14 +833,14 @@ Item {
         Rectangle {
           anchors.centerIn: parent
           width: Math.min(parent.width - Style.space(60), Style.space(440))
-          height: Style.space(295)
+          height: Style.space(335)
           color: root.paper
           border.width: 1
           border.color: root.ink
           Text {
             anchors.fill: parent
             anchors.margins: Style.space(20)
-            text: "KEYBOARD\n\n↑ / ↓ or J / K   Move\n← / H   Parent folder\n→ / L   Open selected folder\nENTER   Open or play\nESC   Clear search / parent / close\n/   Search\nQ   Queue track or folder\nSHIFT+Q   Play next\n1 / 2   Dig / Queue\nSPACE   Play or pause\nDELETE   Remove queue item"
+            text: "KEYBOARD\n\n↑ / ↓ or J / K   Move\n← / H   Parent folder\n→ / L   Open selected folder\nENTER   Open or play\nESC   Clear search / parent / close\n/   Search\nQ   Queue track or folder\nSHIFT+Q   Play next\n1 / 2   Dig / Queue\nSPACE   Play or pause\nSHIFT+J/K or CTRL+↓/↑   Reorder queue\nDELETE / BACKSPACE   Remove queue item"
             color: root.ink
             font.family: Style.font.family
             font.pixelSize: Style.font.bodySmall

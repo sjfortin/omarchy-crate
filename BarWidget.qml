@@ -45,13 +45,13 @@ BarWidget {
     anchors.centerIn: parent
     spacing: Style.space(6)
 
-    Rectangle {
+    CrateMark {
       anchors.verticalCenter: parent.verticalCenter
-      width: Style.space(8)
+      width: Style.space(18)
       height: width
-      color: root.service && root.service.playing ? root.ink : "transparent"
-      border.width: 1
-      border.color: root.ink
+      ink: root.ink
+      paper: root.paper
+      opacity: root.service && root.service.playing ? 1 : 0.72
     }
 
     Text {
@@ -76,14 +76,14 @@ BarWidget {
     }
   }
 
-  Text {
+  CrateMark {
     visible: root.vertical
     anchors.centerIn: parent
-    text: "CR"
-    color: root.ink
-    font.family: root.bar ? root.bar.fontFamily : Style.font.family
-    font.pixelSize: Style.font.caption
-    font.bold: true
+    width: Style.space(18)
+    height: width
+    ink: root.ink
+    paper: root.paper
+    opacity: root.service && root.service.playing ? 1 : 0.72
   }
 
   MouseArea {

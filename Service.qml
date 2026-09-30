@@ -317,9 +317,13 @@ Item {
   }
 
   function clearQueue() {
-    stop()
-    queue = []
-    currentIndex = -1
+    if (currentIndex >= 0 && currentIndex < queue.length) {
+      queue = [queue[currentIndex]]
+      currentIndex = 0
+    } else {
+      queue = []
+      currentIndex = -1
+    }
     saveState()
   }
 
