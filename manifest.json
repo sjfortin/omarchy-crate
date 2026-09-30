@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "sjfortin.crate",
+  "name": "Crate",
+  "version": "0.1.0",
+  "author": "Sam Fortin",
+  "license": "MIT",
+  "description": "A fast, minimal local music player for Omarchy. Dig through folders, search, and build a listening queue.",
+  "kinds": ["service", "bar-widget", "overlay"],
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml",
+    "overlay": "Browser.qml"
+  },
+  "barWidget": {
+    "displayName": "Crate",
+    "description": "Dig through local music, search, and build your queue",
+    "category": "Media",
+    "aliases": ["crate", "local music", "mp3", "player"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "musicDirectory": "~/Music"
+    },
+    "schema": [
+      {
+        "key": "musicDirectory",
+        "type": "path",
+        "label": "Music folder",
+        "defaultValue": "~/Music",
+        "description": "The top folder shown in the browser. Subfolders can be explored with mouse or keyboard."
+      }
+    ]
+  }
+}
