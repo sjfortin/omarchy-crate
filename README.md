@@ -68,6 +68,8 @@ and choose Apps. **Super+Shift+Space** toggles the top bar in the default
 Omarchy bindings. The app entry only opens the enabled plugin; it does not
 install a separate player. The launcher icon lives at `assets/crate.svg`; the
 same record mark appears in the bar and browser, colored by the active theme.
+The bar also has previous, play/pause, and next buttons. Click the title or mark
+to open Crate; middle-click there to play/pause, or scroll to change volume.
 
 ## Keyboard
 

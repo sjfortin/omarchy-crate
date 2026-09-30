@@ -37,7 +37,26 @@ BarWidget {
   }
 
   implicitWidth: vertical ? barSize : content.implicitWidth + Style.space(16)
-  implicitHeight: vertical ? content.implicitHeight + Style.space(12) : barSize
+  implicitHeight: vertical ? verticalContent.implicitHeight + Style.space(12) : barSize
+
+  MouseArea {
+    anchors.fill: parent
+    hoverEnabled: true
+    cursorShape: Qt.PointingHandCursor
+    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+    onClicked: function(mouse) {
+      if (!root.service) return
+      if (mouse.button === Qt.MiddleButton) root.service.togglePlayback()
+      else root.service.openBrowser("files")
+    }
+    onWheel: function(wheel) {
+      if (root.service) root.service.setVolume(root.service.volume + (wheel.angleDelta.y > 0 ? 5 : -5))
+    }
+    onEntered: if (root.bar) root.bar.showTooltip(root, root.service
+      ? root.service.displayTitle + "\nClick to browse · middle-click to play/pause"
+      : "Crate")
+    onExited: if (root.bar) root.bar.hideTooltip(root)
+  }
 
   Row {
     id: content
@@ -74,34 +93,94 @@ BarWidget {
       font.pixelSize: Style.font.bodySmall
       elide: Text.ElideRight
     }
+
+    Row {
+      anchors.verticalCenter: parent.verticalCenter
+      spacing: Style.space(2)
+      TransportButton {
+        icon: "󰒮"
+        hint: "Previous track"
+        available: root.service && root.service.currentIndex >= 0
+        onActivated: root.service.previous()
+      }
+      TransportButton {
+        icon: root.service && root.service.playing ? "󰏤" : "󰐊"
+        hint: root.service && root.service.playing ? "Pause" : "Play"
+        available: root.service && root.service.queue.length > 0
+        onActivated: root.service.togglePlayback()
+      }
+      TransportButton {
+        icon: "󰒭"
+        hint: "Next track"
+        available: root.service &&
+          (root.service.currentIndex + 1 < root.service.queue.length ||
+           (root.service.repeatMode === "all" && root.service.queue.length > 0))
+        onActivated: root.service.next(true)
+      }
+    }
   }
 
-  CrateMark {
+  Column {
+    id: verticalContent
     visible: root.vertical
     anchors.centerIn: parent
-    width: Style.space(18)
-    height: width
-    ink: root.ink
-    paper: root.paper
-    opacity: root.service && root.service.playing ? 1 : 0.72
+    spacing: Style.space(2)
+    CrateMark {
+      anchors.horizontalCenter: parent.horizontalCenter
+      width: Style.space(18)
+      height: width
+      ink: root.ink
+      paper: root.paper
+      opacity: root.service && root.service.playing ? 1 : 0.72
+    }
+    TransportButton {
+      icon: "󰒮"
+      hint: "Previous track"
+      available: root.service && root.service.currentIndex >= 0
+      onActivated: root.service.previous()
+    }
+    TransportButton {
+      icon: root.service && root.service.playing ? "󰏤" : "󰐊"
+      hint: root.service && root.service.playing ? "Pause" : "Play"
+      available: root.service && root.service.queue.length > 0
+      onActivated: root.service.togglePlayback()
+    }
+    TransportButton {
+      icon: "󰒭"
+      hint: "Next track"
+      available: root.service &&
+        (root.service.currentIndex + 1 < root.service.queue.length ||
+         (root.service.repeatMode === "all" && root.service.queue.length > 0))
+      onActivated: root.service.next(true)
+    }
   }
 
-  MouseArea {
-    anchors.fill: parent
-    hoverEnabled: true
-    cursorShape: Qt.PointingHandCursor
-    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-    onClicked: function(mouse) {
-      if (!root.service) return
-      if (mouse.button === Qt.MiddleButton) root.service.togglePlayback()
-      else root.service.openBrowser("files")
+  component TransportButton: Item {
+    id: control
+    property string icon: ""
+    property string hint: ""
+    property bool available: false
+    signal activated()
+    width: Style.space(22)
+    height: Style.space(22)
+    opacity: available ? 1 : 0.4
+    Text {
+      anchors.centerIn: parent
+      text: control.icon
+      color: root.ink
+      font.family: root.bar ? root.bar.fontFamily : Style.font.family
+      font.pixelSize: Style.font.body
     }
-    onWheel: function(wheel) {
-      if (root.service) root.service.setVolume(root.service.volume + (wheel.angleDelta.y > 0 ? 5 : -5))
+    MouseArea {
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: control.available ? Qt.PointingHandCursor : Qt.ArrowCursor
+      onClicked: if (control.available) control.activated()
+      onWheel: function(wheel) {
+        if (root.service) root.service.setVolume(root.service.volume + (wheel.angleDelta.y > 0 ? 5 : -5))
+      }
+      onEntered: if (root.bar && control.available) root.bar.showTooltip(control, control.hint)
+      onExited: if (root.bar) root.bar.hideTooltip(control)
     }
-    onEntered: if (root.bar) root.bar.showTooltip(root, root.service
-      ? root.service.displayTitle + "\nClick to browse · middle-click to play/pause"
-      : "Crate")
-    onExited: if (root.bar) root.bar.hideTooltip(root)
   }
 }
