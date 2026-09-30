@@ -34,6 +34,9 @@ saved under `~/.local/state/omarchy/crate/state.json` (or
 shell to resume the saved track and position. Closing the browser leaves music
 playing.
 
+When NTS Radio starts local playback, Crate pauses and keeps its place. Starting
+Crate pauses local NTS playback. NTS casting to another device is unaffected.
+
 ## Requirements and installation
 
 - Omarchy with the Quickshell plugin system

@@ -78,6 +78,15 @@ Item {
   property bool ipcReady: false
   property int ipcAttempts: 0
 
+  // Keep local audio exclusive with NTS Radio. Its endpoint ignores cast output.
+  onPlayingChanged: if (playing && !pauseNts.running) pauseNts.running = true
+
+  Process {
+    id: pauseNts
+    running: false
+    command: ["omarchy-shell", "-q", "nts-radio", "pauseLocal"]
+  }
+
   function titleFor(path) {
     if (!path) return "Nothing playing"
     var name = String(path).split("/").pop()
@@ -252,15 +261,47 @@ Item {
     player.running = true
   }
 
-  function togglePlayback() {
+  function play() {
+    if (startAfterStop.running) return
     if (!player.running) {
-      if (currentIndex >= 0) launchTrack()
-      else if (queue.length) playAt(0)
-    } else {
-      paused = !paused
-      send(["set_property", "pause", paused])
+      if (currentIndex >= 0) {
+        paused = false
+        launchTrack()
+        saveState()
+      } else if (queue.length) playAt(0)
+    } else if (paused) {
+      paused = false
+      send(["set_property", "pause", false])
       saveState()
     }
+  }
+
+  function pause() {
+    if (startAfterStop.running) {
+      startAfterStop.stop()
+      switching = false
+      stopRequested = true
+      paused = true
+      resumePending = true
+      saveState()
+      return
+    }
+    if (!player.running || paused) return
+    paused = true
+    if (ipcReady) send(["set_property", "pause", true])
+    else {
+      // Before mpv's socket opens, stop and resume from saved position later.
+      stopRequested = true
+      closeIpc()
+      player.running = false
+      resumePending = true
+    }
+    saveState()
+  }
+
+  function togglePlayback() {
+    if (playing) pause()
+    else play()
   }
 
   function stop() {
@@ -603,6 +644,8 @@ Item {
   IpcHandler {
     target: "crate"
     function open(): string { return root.openBrowser("files") ? "ok" : "unavailable" }
+    function play(): void { root.play() }
+    function pause(): void { root.pause() }
     function toggle(): void { root.togglePlayback() }
     function next(): void { root.next(true) }
     function previous(): void { root.previous() }
