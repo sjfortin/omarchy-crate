@@ -77,14 +77,29 @@ Item {
   property bool stopRequested: false
   property bool ipcReady: false
   property int ipcAttempts: 0
+  property real localPlaybackStartedAt: 0
+  property real queuedClaimAt: 0
+  property real sentClaimAt: 0
 
   // Keep local audio exclusive with NTS Radio. Its endpoint ignores cast output.
-  onPlayingChanged: if (playing && !pauseNts.running) pauseNts.running = true
+  onPlayingChanged: {
+    if (!playing) return
+    localPlaybackStartedAt = Date.now()
+    queuedClaimAt = localPlaybackStartedAt
+    sendAudioClaim()
+  }
+
+  function sendAudioClaim() {
+    if (pauseNts.running || queuedClaimAt <= sentClaimAt) return
+    sentClaimAt = queuedClaimAt
+    pauseNts.command = ["omarchy-shell", "-q", "nts-radio", "pauseLocalBefore", String(sentClaimAt)]
+    pauseNts.running = true
+  }
 
   Process {
     id: pauseNts
     running: false
-    command: ["omarchy-shell", "-q", "nts-radio", "pauseLocal"]
+    onExited: root.sendAudioClaim()
   }
 
   function titleFor(path) {
@@ -646,6 +661,10 @@ Item {
     function open(): string { return root.openBrowser("files") ? "ok" : "unavailable" }
     function play(): void { root.play() }
     function pause(): void { root.pause() }
+    function pauseBefore(stamp: string): void {
+      // A same-millisecond tie goes to Crate.
+      if (Number(stamp) > root.localPlaybackStartedAt) root.pause()
+    }
     function toggle(): void { root.togglePlayback() }
     function next(): void { root.next(true) }
     function previous(): void { root.previous() }

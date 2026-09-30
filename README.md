@@ -36,6 +36,7 @@ playing.
 
 When NTS Radio starts local playback, Crate pauses and keeps its place. Starting
 Crate pauses local NTS playback. NTS casting to another device is unaffected.
+Crate works the same when NTS Radio is not installed.
 
 ## Requirements and installation
 

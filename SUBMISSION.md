@@ -33,7 +33,8 @@ library and provides folder browsing, fuzzy path and filename search, album
 playback, a persistent queue, keyboard navigation, and bar playback controls.
 It requires mpv and Python 3. It reads local music and writes playback state
 under the user's XDG state directory; the optional Apps launcher is installed
-only when the user runs its script.
+only when the user runs its script. Crate 0.1.8 can pause local NTS Radio when
+music starts; the reciprocal NTS Radio update is in PR #3. Casting is unaffected.
 
 ### Submission checklist
 
