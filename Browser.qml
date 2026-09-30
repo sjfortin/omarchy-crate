@@ -12,6 +12,7 @@ Item {
   property bool closingFromHost: false
   property string page: "files"
   property int cursor: 0
+  property string pendingFolderSelection: ""
   property bool helpOpen: false
   readonly property bool searching: searchInput.text.trim() !== ""
   readonly property var visibleEntries: service
@@ -53,12 +54,37 @@ Item {
 
   function openDirectory(path) {
     if (!service) return
+    pendingFolderSelection = ""
     searchDelay.stop()
     searchInput.text = ""
     service.search("")
     service.browse(path)
     cursor = 0
     Qt.callLater(root.restoreKeyboardFocus)
+  }
+
+  function goParent() {
+    if (!service || page !== "files") return false
+    if (searching) {
+      searchDelay.stop()
+      searchInput.text = ""
+      service.search("")
+      cursor = 0
+      return true
+    }
+    if (!service.parentDirectory) return false
+    var child = service.directory
+    openDirectory(service.parentDirectory)
+    pendingFolderSelection = child
+    return true
+  }
+
+  function openSelectedFolder() {
+    if (!service || page !== "files") return false
+    var entry = visibleEntries[cursor]
+    if (!entry || entry.kind !== "folder") return false
+    openDirectory(entry.path)
+    return true
   }
 
   function open(payloadJson) {
@@ -157,6 +183,24 @@ Item {
     onTriggered: root.restoreKeyboardFocus()
   }
 
+  Connections {
+    target: root.service
+    function onEntriesChanged() {
+      if (!root.pendingFolderSelection || !root.service) return
+      var wanted = root.pendingFolderSelection
+      root.pendingFolderSelection = ""
+      for (var i = 0; i < root.service.entries.length; i++) {
+        if (root.service.entries[i].path === wanted) {
+          root.cursor = i
+          Qt.callLater(function() {
+            if (fileList.count > i) fileList.positionViewAtIndex(i, ListView.Contain)
+          })
+          break
+        }
+      }
+    }
+  }
+
   FloatingWindow {
     id: window
     title: "Crate"
@@ -193,14 +237,7 @@ Item {
           return
         }
         if (event.key === Qt.Key_Escape) {
-          if (root.page === "files" && root.searching) {
-            searchInput.text = ""
-            if (root.service) root.service.search("")
-          }
-          else if (root.page === "files" && root.service && root.service.parentDirectory)
-            root.openDirectory(root.service.parentDirectory)
-          else root.requestClose()
-          root.cursor = 0
+          if (!root.goParent()) root.requestClose()
           event.accepted = true
           return
         }
@@ -212,9 +249,13 @@ Item {
         }
         if (event.key === Qt.Key_Down || event.key === Qt.Key_J) root.moveCursor(1)
         else if (event.key === Qt.Key_Up || event.key === Qt.Key_K) root.moveCursor(-1)
+        else if ((event.key === Qt.Key_Left || event.key === Qt.Key_H) && root.page === "files")
+          root.goParent()
+        else if ((event.key === Qt.Key_Right || event.key === Qt.Key_L) && root.page === "files")
+          root.openSelectedFolder()
         else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) root.activateCursor()
         else if (event.key === Qt.Key_Backspace && root.page === "files" && root.service)
-          { root.openDirectory(root.service.parentDirectory) }
+          root.goParent()
         else if (event.key === Qt.Key_Space && root.service) root.service.togglePlayback()
         else if (event.key === Qt.Key_Q) root.queueSelected((event.modifiers & Qt.ShiftModifier) !== 0)
         else if (event.key === Qt.Key_Slash && !(event.modifiers & Qt.ShiftModifier))
@@ -371,7 +412,7 @@ Item {
                 Action {
                   label: "← UP"
                   enabled: root.service && root.service.parentDirectory !== ""
-                  onActivated: root.openDirectory(root.service.parentDirectory)
+                  onActivated: root.goParent()
                 }
                 Flickable {
                   id: breadcrumbStrip
@@ -768,14 +809,14 @@ Item {
         Rectangle {
           anchors.centerIn: parent
           width: Math.min(parent.width - Style.space(60), Style.space(440))
-          height: Style.space(260)
+          height: Style.space(295)
           color: root.paper
           border.width: 1
           border.color: root.ink
           Text {
             anchors.fill: parent
             anchors.margins: Style.space(20)
-            text: "KEYBOARD\n\n↑ / ↓ or J / K   Move\nENTER   Open or play\nBACKSPACE / ESC   Parent / close\n/   Search\nQ   Queue track or folder\nSHIFT+Q   Play track next\n1 / 2   Dig / Queue\nSPACE   Play or pause\nDELETE   Remove queue item"
+            text: "KEYBOARD\n\n↑ / ↓ or J / K   Move\n← / H   Parent folder\n→ / L   Open selected folder\nENTER   Open or play\nESC   Clear search / parent / close\n/   Search\nQ   Queue track or folder\nSHIFT+Q   Play next\n1 / 2   Dig / Queue\nSPACE   Play or pause\nDELETE   Remove queue item"
             color: root.ink
             font.family: Style.font.family
             font.pixelSize: Style.font.bodySmall

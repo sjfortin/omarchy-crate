@@ -74,6 +74,8 @@ install a separate player.
 | --- | --- |
 | `1` / `2` | Dig / Queue |
 | `↑` / `↓` or `j` / `k` | Move selection |
+| `←` / `h` | Parent folder |
+| `→` / `l` | Open selected folder |
 | `Enter` | Open folder or play the selected track's folder |
 | `Backspace` / `Esc` | Parent folder / clear search / close |
 | `/` | Search the collection |
