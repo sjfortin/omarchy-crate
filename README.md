@@ -27,14 +27,21 @@ saved under `~/.local/state/omarchy/crate/state.json` (or
 shell to resume the saved track and position. Closing the browser leaves music
 playing.
 
-## Requirements and local setup
+## Requirements and installation
 
 - Omarchy with the Quickshell plugin system
 - `mpv` for playback
 - Python 3 for folder browsing and search
 
-Place this folder at `~/.config/omarchy/plugins/sjfortin.crate`. With
-`omarchy-shell` running, use:
+With `omarchy-shell` running, install from GitHub:
+
+```bash
+omarchy plugin add https://github.com/sjfortin/omarchy-crate.git --enable
+omarchy-shell crate open
+```
+
+For local development, place this folder at
+`~/.config/omarchy/plugins/sjfortin.crate`, then use:
 
 ```bash
 omarchy plugin validate ~/.config/omarchy/plugins/sjfortin.crate
@@ -43,8 +50,7 @@ omarchy-shell crate open
 ```
 
 Click **CRATE** in the bar to open it; middle-click to play or pause, and scroll
-to change volume. Once published as a Git repository, it can be installed with
-`omarchy plugin add <git-url> --enable`.
+to change volume.
 
 ## Keyboard
 

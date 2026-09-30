@@ -6,7 +6,7 @@ and the plugin is ready to submit.
 ## Listing
 
 - **Name:** Crate
-- **Repository URL:** Add the public GitHub URL before submitting.
+- **Repository URL:** https://github.com/sjfortin/omarchy-crate
 - **Category:** Widgets
 - **Tags:** Media, Bar, Quickshell
 - **Short description:** A fast, minimal local music player for Omarchy. Dig through folders, search, and build a listening queue.
@@ -27,8 +27,7 @@ checks.
 
 - Test browsing, search, folder queuing, playback, and resume in a running
   Omarchy shell, including large folders, missing files, and light/dark themes.
-- Publish a public GitHub repository with `manifest.json`, README, and LICENSE
-  at the root; add its URL above.
+- Keep `manifest.json`, README, and LICENSE at the public repository root.
 - Submit via the [marketplace form](https://github.com/omacom/omarchy-plugin-marketplace/issues/new?template=submit-plugin.yml).
 
 Marketplace verification applies to a specific commit after checks and
