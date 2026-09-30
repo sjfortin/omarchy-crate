@@ -79,6 +79,10 @@ install a separate player.
 | `Delete` | Remove selected queue item |
 | `?` | Shortcut help |
 
+While typing a search, press `↓` or `Tab` to move focus to the results. `1`,
+`2`, and `?` also work directly from the search field. Returning to Dig keeps
+the search results visible with focus on keyboard navigation.
+
 Use **QUEUE THIS FOLDER** to add the current folder and its subfolders. Search
 runs only when requested; Crate does not build a separate music database.
 Search currently uses filenames and folder paths, so metadata that appears

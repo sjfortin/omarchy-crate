@@ -23,12 +23,11 @@ Item {
   readonly property color paper: Color.background
   readonly property color dimInk: Util.alpha(ink, 0.58)
   readonly property color ruleColor: Util.alpha(ink, 0.2)
-  readonly property bool typing: searchInput.activeFocus
 
   function restoreKeyboardFocus() {
     if (!opened || !window.visible) return
     if (typeof window.requestActivate === "function") window.requestActivate()
-    keyScope.forceActiveFocus()
+    keyCatcher.forceActiveFocus()
   }
 
   function openDirectory(path) {
@@ -77,7 +76,7 @@ Item {
   function navigate(target) {
     page = target
     cursor = 0
-    Qt.callLater(root.restoreKeyboardFocus)
+    keyCatcher.forceActiveFocus()
   }
 
   function selectionLength() {
@@ -161,14 +160,22 @@ Item {
       anchors.fill: parent
       focus: true
 
-      Keys.onPressed: function(event) {
+      Item {
+        id: keyCatcher
+        anchors.fill: parent
+        focus: true
+        Keys.priority: Keys.BeforeItem
+        Keys.onPressed: function(event) {
         if (root.helpOpen) {
           root.helpOpen = false
           event.accepted = true
           return
         }
         if (event.key === Qt.Key_Escape) {
-          if (root.searching) searchInput.text = ""
+          if (root.page === "files" && root.searching) {
+            searchInput.text = ""
+            if (root.service) root.service.search("")
+          }
           else if (root.page === "files" && root.service && root.service.parentDirectory)
             root.openDirectory(root.service.parentDirectory)
           else root.requestClose()
@@ -182,7 +189,6 @@ Item {
           event.accepted = true
           return
         }
-        if (root.typing) return
         if (event.key === Qt.Key_Down || event.key === Qt.Key_J) root.moveCursor(1)
         else if (event.key === Qt.Key_Up || event.key === Qt.Key_K) root.moveCursor(-1)
         else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) root.activateCursor()
@@ -198,6 +204,7 @@ Item {
         else if (event.key === Qt.Key_2) root.navigate("queue")
         else return
         event.accepted = true
+        }
       }
 
       Column {
@@ -386,6 +393,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                   }
                   onTextChanged: { root.cursor = 0; searchDelay.restart() }
+                  Keys.priority: Keys.BeforeItem
                   Keys.onPressed: function(event) {
                     if (event.key === Qt.Key_Escape) {
                       text = ""; if (root.service) root.service.search("")
@@ -393,10 +401,17 @@ Item {
                     } else if (event.text === "?" || event.key === Qt.Key_Question
                                || (event.key === Qt.Key_Slash && event.modifiers & Qt.ShiftModifier)) {
                       root.helpOpen = true; root.restoreKeyboardFocus(); event.accepted = true
+                    } else if (event.key === Qt.Key_1 || event.key === Qt.Key_2) {
+                      root.navigate(event.key === Qt.Key_1 ? "files" : "queue")
+                      event.accepted = true
                     } else if (event.key === Qt.Key_Down) {
-                      keyScope.forceActiveFocus(); root.moveCursor(1); event.accepted = true
+                      root.restoreKeyboardFocus(); root.moveCursor(1); event.accepted = true
+                    } else if (event.key === Qt.Key_Up) {
+                      root.restoreKeyboardFocus(); root.moveCursor(-1); event.accepted = true
                     } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                      root.activateCursor(); event.accepted = true
+                      root.activateCursor(); root.restoreKeyboardFocus(); event.accepted = true
+                    } else if (event.key === Qt.Key_Tab) {
+                      root.restoreKeyboardFocus(); event.accepted = true
                     }
                   }
                 }
