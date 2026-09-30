@@ -267,6 +267,7 @@ Item {
     player.command = [
       "mpv", "--no-config", "--no-video", "--audio-display=no",
       "--terminal=no", "--idle=no", "--keep-open=no", "--ytdl=no",
+      "--access-references=no", "--autoload-files=no",
       "--audio-client-name=Crate", "--volume=" + volume,
       "--input-ipc-server=" + socketPath,
       "--start=" + (resumePending ? Math.max(0, positionSec) : 0),

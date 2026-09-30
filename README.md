@@ -133,6 +133,9 @@ the Dig and Queue window; `BarWidget.qml` provides bar controls.
 `scripts/browse.py` reads folders, searches paths, and collects folder tracks
 without leaving the configured music root.
 `desktop/` contains the optional Apps launcher entry.
+Playback disables mpv's reference loading and automatic companion-file loading,
+so a playlist disguised as an audio file cannot instruct it to open other files
+or URLs. Crate manages its queue itself.
 
 Run these checks after changes:
 
