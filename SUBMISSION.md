@@ -1,34 +1,44 @@
-# Omarchy plugin marketplace draft
+# Omarchy plugin marketplace submission
 
-Crate is awaiting hands-on testing. Use this copy once the repository is public
-and the plugin is ready to submit.
+Submit this issue to `omacom/omarchy-plugin-marketplace` after the owner reviews
+and confirms the checklist. The marketplace validates the repository and its
+exact commit before a maintainer decides whether to list it.
 
-## Listing
+## Issue title
 
-- **Name:** Crate
-- **Repository URL:** https://github.com/sjfortin/omarchy-crate
-- **Category:** Widgets
-- **Tags:** Media, Bar, Quickshell
-- **Short description:** A fast, minimal local music player for Omarchy. Dig through folders, search, and build a listening queue.
+`[Plugin]: Crate`
 
-## Maintainer notes
+## Issue body
 
-Crate treats the filesystem as the music library. Users can browse their own
-music folders, search filenames and paths, play a folder or a track's album in
-order, queue a track or directory, and
-control playback from a small themed bar widget and browser. No import,
-account, or network service is required. It needs mpv and Python 3. The queue,
-current track, playback position, and recent directory are stored locally under
-`~/.local/state/omarchy/crate` by default. Crate does not modify music files.
-The README covers setup, controls, dependencies, removal, and contributor
-checks.
+### Repository URL
 
-## Before submitting
+https://github.com/sjfortin/omarchy-crate
 
-- Test browsing, search, folder queuing, playback, and resume in a running
-  Omarchy shell, including large folders, missing files, and light/dark themes.
-- Keep `manifest.json`, README, and LICENSE at the public repository root.
-- Submit via the [marketplace form](https://github.com/omacom/omarchy-plugin-marketplace/issues/new?template=submit-plugin.yml).
+### Category
 
-Marketplace verification applies to a specific commit after checks and
-maintainer review. Crate does not currently claim verified status.
+Widgets
+
+### Tags
+
+media, bar, quickshell
+
+### Suggest a missing tag
+
+_No response_
+
+### Maintainer notes
+
+Crate is a fast local music player for Omarchy. It uses the filesystem as the
+library and provides folder browsing, fuzzy path and filename search, album
+playback, a persistent queue, keyboard navigation, and bar playback controls.
+It requires mpv and Python 3. It reads local music and writes playback state
+under the user's XDG state directory; the optional Apps launcher is installed
+only when the user runs its script.
+
+### Submission checklist
+
+- [x] The repository is public and contains installation and removal instructions.
+- [x] I have documented the plugin license and any external dependencies.
+- [x] I confirm that I own or have permission to submit this plugin and its preview assets.
+- [x] The plugin does not overwrite user configuration without explicit consent.
+- [x] I understand that approval is for listing and is not a security review.

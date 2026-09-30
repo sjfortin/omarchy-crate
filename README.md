@@ -132,5 +132,5 @@ omarchy plugin validate ~/.config/omarchy/plugins/sjfortin.crate
 python3 -m unittest discover -s tests -v
 ```
 
-Please also test in a running Omarchy shell. This is an early version awaiting
-hands-on testing before store submission.
+Please also test playback and navigation in a running Omarchy shell when
+changing the QML interface.
