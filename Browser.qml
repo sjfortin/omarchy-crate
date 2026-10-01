@@ -26,6 +26,15 @@ Item {
   readonly property color dimInk: Util.alpha(ink, 0.58)
   readonly property color ruleColor: Util.alpha(ink, 0.2)
 
+  function formatTime(seconds) {
+    var total = Math.max(0, Math.floor(Number(seconds) || 0))
+    var minutes = Math.floor(total / 60)
+    var paddedSeconds = ("0" + (total % 60)).slice(-2)
+    if (minutes >= 60)
+      return Math.floor(minutes / 60) + ":" + ("0" + (minutes % 60)).slice(-2) + ":" + paddedSeconds
+    return minutes + ":" + paddedSeconds
+  }
+
   function buildBreadcrumbs() {
     if (!service) return []
     var base = String(service.rootDirectory || "")
@@ -845,13 +854,35 @@ Item {
           Text {
             anchors.left: parent.left
             anchors.leftMargin: Style.space(18)
+            anchors.right: playbackTime.left
+            anchors.rightMargin: Style.space(12)
             anchors.bottom: parent.bottom
             anchors.bottomMargin: Style.space(5)
             text: root.service && root.service.playbackError ? root.service.playbackError
               : "SPACE PLAY/PAUSE  ·  / SEARCH  ·  Q QUEUE  ·  SHIFT+Q NEXT  ·  ? HELP"
+            elide: Text.ElideRight
             color: root.dimInk
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
+          }
+
+          Text {
+            id: playbackTime
+            anchors.right: parent.right
+            anchors.rightMargin: Style.space(18)
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: Style.space(5)
+            text: root.service && root.service.currentPath
+              ? root.formatTime(root.service.durationSec > 0
+                  ? Math.min(root.service.positionSec, root.service.durationSec)
+                  : root.service.positionSec)
+                + " / " + (root.service.durationSec > 0
+                  ? root.formatTime(root.service.durationSec) : "--:--")
+              : ""
+            color: root.ink
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
           }
         }
       }

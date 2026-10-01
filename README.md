@@ -79,6 +79,7 @@ contents. Removal deletes only files that still match Crate's shipped files;
 edited or unrelated files are left in place.
 The bar also has previous, play/pause, and next buttons. Click the title or mark
 to open Crate; middle-click there to play/pause, or scroll to change volume.
+The player shows elapsed time and total track length beneath the seek bar.
 
 ## Keyboard
 
