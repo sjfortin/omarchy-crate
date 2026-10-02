@@ -1,10 +1,13 @@
 import tempfile
+import json
+import shutil
+import subprocess
 import unittest
 from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from browse import list_folder, search_music, tracks_in_folder
+from browse import list_folder, search_music, tracks_in_folder, queue_metadata
 
 
 class BrowseTests(unittest.TestCase):
@@ -67,6 +70,26 @@ class BrowseTests(unittest.TestCase):
             result = tracks_in_folder(directory, str(root / "Artist"))
             self.assertEqual({entry["name"] for entry in result["entries"]}, {"01.mp3", "02.flac"})
             self.assertEqual(tracks_in_folder(directory, outside)["error"], "Folder is outside the music library")
+
+    def test_accent_insensitive_search(self):
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "Björk - Jóga.flac").touch()
+            result = search_music(directory, "bjork joga")
+            self.assertEqual(result["entries"][0]["name"], "Björk - Jóga.flac")
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg required")
+    def test_queue_metadata_reads_tags_and_rejects_outside_library(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            track = Path(directory) / "song.wav"
+            subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "anullsrc",
+                            "-t", "0.05", "-metadata", "title=Tagged title",
+                            "-metadata", "artist=Tagged artist", str(track)], check=True)
+            external = Path(outside) / "other.wav"
+            shutil.copyfile(track, external)
+            result = queue_metadata(directory, json.dumps([str(track), str(external)]))
+            self.assertEqual(result["metadata"][str(track)]["title"], "Tagged title")
+            self.assertEqual(result["metadata"][str(track)]["artist"], "Tagged artist")
+            self.assertEqual(result["metadata"][str(external)], {})
 
     def test_album_tracks_follow_natural_order(self):
         with tempfile.TemporaryDirectory() as directory:

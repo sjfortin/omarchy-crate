@@ -16,7 +16,7 @@ Item {
   property bool helpOpen: false
   readonly property bool searching: searchInput.text.trim() !== ""
   readonly property var visibleEntries: service
-    ? (searching ? service.searchResults : (service.directoryLoading ? [] : service.entries)) : []
+    ? (searching ? (service.searchQuery === searchInput.text.trim() ? service.searchResults : []) : (service.directoryLoading ? [] : service.entries)) : []
   readonly property var breadcrumbs: buildBreadcrumbs()
 
   readonly property string pluginId: manifest && manifest.id
@@ -156,14 +156,8 @@ Item {
       var entry = visibleEntries[cursor]
       if (!entry) return
       if (entry.kind === "folder") openDirectory(entry.path)
-      else playTrackAlbum(entry.path)
+      else service.playTrack(entry.path)
     } else service.playAt(cursor)
-  }
-
-  function playTrackAlbum(path) {
-    if (!service || !path) return
-    var folder = String(path).slice(0, String(path).lastIndexOf("/"))
-    service.playFolder(folder, path)
   }
 
   function moveCursor(delta) {
@@ -208,11 +202,12 @@ Item {
     if (queueList.count) queueList.positionViewAtIndex(cursor, ListView.Contain)
   }
 
-  function removeQueueSelection() {
-    if (!service || page !== "queue" || cursor < 0 || cursor >= service.queue.length) return
+  function removeQueueSelection(index) {
+    if (!service || page !== "queue") return
+    if (index !== undefined) cursor = index
+    if (cursor < 0 || cursor >= service.queue.length) return
     service.removeQueueAt(cursor)
     cursor = Math.max(0, Math.min(cursor, service.queue.length - 1))
-    if (queueList.count) queueList.positionViewAtIndex(cursor, ListView.Contain)
   }
 
   function queueSelected(next) {
@@ -237,6 +232,16 @@ Item {
 
   Connections {
     target: root.service
+    function onQueueEditing() { queueList.savedOffset = queueList.contentY }
+    function onQueueChanged() {
+      var offset = queueList.savedOffset
+      root.cursor = Math.max(0, Math.min(root.cursor, root.service.queue.length - 1))
+      Qt.callLater(function() {
+        queueList.contentY = Math.max(queueList.originY,
+          Math.min(offset, queueList.originY + Math.max(0, queueList.contentHeight - queueList.height)))
+        queueList.savedOffset = queueList.contentY
+      })
+    }
     function onEntriesChanged() {
       if (!root.pendingFolderSelection || !root.service) return
       var wanted = root.pendingFolderSelection
@@ -279,6 +284,7 @@ Item {
 
       Item {
         id: keyCatcher
+        objectName: "crateKeys"
         anchors.fill: parent
         focus: true
         Keys.priority: Keys.BeforeItem
@@ -543,6 +549,7 @@ Item {
                 border.color: root.ruleColor
                 TextInput {
                   id: searchInput
+                  objectName: "crateSearch"
                   anchors.fill: parent
                   anchors.leftMargin: Style.space(10)
                   anchors.rightMargin: Style.space(10)
@@ -566,14 +573,8 @@ Item {
                     if (event.key === Qt.Key_Escape) {
                       text = ""; if (root.service) root.service.search("")
                       root.restoreKeyboardFocus(); event.accepted = true
-                    } else if (event.text === "?" || event.key === Qt.Key_Question
-                               || (event.key === Qt.Key_Slash && event.modifiers & Qt.ShiftModifier)) {
-                      root.helpOpen = true; root.restoreKeyboardFocus(); event.accepted = true
-                    } else if (event.key === Qt.Key_1 || event.key === Qt.Key_2) {
-                      root.navigate(event.key === Qt.Key_1 ? "files" : "queue")
-                      event.accepted = true
                     } else if (event.key === Qt.Key_Down) {
-                      root.restoreKeyboardFocus(); root.moveCursor(1); event.accepted = true
+                      root.cursor = 0; root.restoreKeyboardFocus(); event.accepted = true
                     } else if (event.key === Qt.Key_Up) {
                       root.restoreKeyboardFocus(); root.moveCursor(-1); event.accepted = true
                     } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
@@ -592,12 +593,12 @@ Item {
 
               Text {
                 visible: root.service && (root.searching
-                  ? (root.service.searchLoading || root.service.searchError || root.service.searchTruncated)
+                  ? true
                   : (root.service.directoryLoading || root.service.directoryError || root.service.truncated))
                 width: parent.width
                 text: root.service ? (root.searching
-                  ? (root.service.searchError || (root.service.searchLoading ? "Searching…"
-                    : "Showing first 100 matches"))
+                  ? (root.service.searchError || ((searchDelay.running || root.service.searchLoading) ? "Searching…"
+                    : (root.visibleEntries.length ? (root.service.searchTruncated ? "Showing first 100 matches — refine your search" : root.visibleEntries.length + " matches") : "No matches — try a title, artist or album" )))
                   : (root.service.directoryError || (root.service.directoryLoading ? "Opening folder…"
                     : "Showing first 5,000 items"))) : ""
                 color: root.dimInk
@@ -617,7 +618,7 @@ Item {
                   required property var modelData
                   required property int index
                   width: fileList.width
-                  height: Style.space(42)
+                  height: Style.space(root.searching ? 52 : 42)
                   color: root.cursor === index ? Util.alpha(root.ink, 0.1)
                     : (fileHover.hovered ? Util.alpha(root.ink, 0.055) : "transparent")
 
@@ -626,14 +627,30 @@ Item {
                     anchors.leftMargin: Style.space(12)
                     anchors.right: fileActions.left
                     anchors.rightMargin: Style.space(10)
-                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.top: parent.top
+                    anchors.topMargin: root.searching ? Style.space(4) : Style.space(10)
                     text: (fileRow.modelData.kind === "folder" ? "▸  " : "   ")
-                      + (root.searching ? fileRow.modelData.relative : fileRow.modelData.name)
+                      + fileRow.modelData.name
                     textFormat: Text.PlainText
                     color: root.ink
                     font.family: Style.font.family
                     font.pixelSize: Style.font.body
                     elide: Text.ElideRight
+                  }
+
+                  Text {
+                    visible: root.searching
+                    anchors.left: parent.left
+                    anchors.leftMargin: Style.space(12)
+                    anchors.right: fileActions.left
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: Style.space(3)
+                    text: fileRow.modelData.relative || ""
+                    textFormat: Text.PlainText
+                    color: root.dimInk
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.caption
+                    elide: Text.ElideMiddle
                   }
 
                   Row {
@@ -658,8 +675,10 @@ Item {
                     }
                     Action {
                       label: "PLAY"
-                      visible: fileRow.modelData.kind === "folder"
-                      onActivated: root.service.playFolder(fileRow.modelData.path)
+                      onActivated: {
+                        if (fileRow.modelData.kind === "folder") root.service.playFolder(fileRow.modelData.path)
+                        else root.service.playTrack(fileRow.modelData.path)
+                      }
                     }
                     Action {
                       label: "OPEN"
@@ -679,7 +698,7 @@ Item {
                       root.cursor = fileRow.index
                       if (fileRow.modelData.kind === "folder") {
                         root.openDirectory(fileRow.modelData.path)
-                      } else root.playTrackAlbum(fileRow.modelData.path)
+                      } else root.service.playTrack(fileRow.modelData.path)
                       root.restoreKeyboardFocus()
                     }
                   }
@@ -695,6 +714,7 @@ Item {
                   font.pixelSize: Style.font.caption
                 }
                 Action {
+                  visible: !root.searching
                   label: "QUEUE THIS FOLDER"
                   onActivated: {
                     if (!root.service) return
@@ -724,15 +744,13 @@ Item {
                   font.bold: true
                 }
                 Action { label: "SHUFFLE"; onActivated: if (root.service) root.service.shuffleQueue() }
-                Action {
-                  label: root.service ? "REPEAT " + root.service.repeatMode.toUpperCase() : "REPEAT OFF"
-                  onActivated: if (root.service) root.service.cycleRepeat()
-                }
                 Action { label: "CLEAR OTHERS"; onActivated: if (root.service) root.service.clearQueue() }
               }
               Rectangle { width: parent.width; height: 1; color: root.ruleColor }
               ListView {
                 id: queueList
+                objectName: "crateQueue"
+                property real savedOffset: 0
                 width: parent.width
                 height: parent.height - Style.space(50)
                 clip: true
@@ -751,7 +769,7 @@ Item {
                     anchors.right: queueActions.left
                     anchors.rightMargin: Style.space(8)
                     anchors.verticalCenter: parent.verticalCenter
-                    text: (queueRow.index + 1) + "   " + (root.service ? root.service.titleFor(queueRow.modelData) : "")
+                    text: (queueRow.index + 1) + "   " + (root.service ? root.service.queueTitle(queueRow.modelData) : "")
                     textFormat: Text.PlainText
                     color: root.ink
                     font.family: Style.font.family
@@ -765,7 +783,7 @@ Item {
                     spacing: Style.space(3)
                     Action { label: "↑"; onActivated: root.service.moveQueue(queueRow.index, -1) }
                     Action { label: "↓"; onActivated: root.service.moveQueue(queueRow.index, 1) }
-                    Action { label: "×"; onActivated: root.service.removeQueueAt(queueRow.index) }
+                    Action { objectName: "removeQueue" + queueRow.index; label: "×"; onActivated: root.removeQueueSelection(queueRow.index) }
                   }
                   MouseArea {
                     anchors.left: parent.left
@@ -819,7 +837,7 @@ Item {
             Action { label: "−"; onActivated: if (root.service) root.service.setVolume(root.service.volume - 5) }
             Text {
               anchors.verticalCenter: parent.verticalCenter
-              text: root.service ? root.service.volume + "%" : ""
+              text: root.service ? (root.service.muted ? "MUTED" : "VOL " + root.service.volume + "%") : ""
               color: root.dimInk
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
@@ -858,7 +876,8 @@ Item {
             anchors.rightMargin: Style.space(12)
             anchors.bottom: parent.bottom
             anchors.bottomMargin: Style.space(5)
-            text: root.service && root.service.playbackError ? root.service.playbackError
+            text: root.service && root.service.notice ? root.service.notice
+              : root.service && root.service.playbackError ? root.service.playbackError
               : "SPACE PLAY/PAUSE  ·  / SEARCH  ·  Q QUEUE  ·  SHIFT+Q NEXT  ·  ? HELP"
             elide: Text.ElideRight
             color: root.dimInk
@@ -902,7 +921,7 @@ Item {
           Text {
             anchors.fill: parent
             anchors.margins: Style.space(20)
-            text: "KEYBOARD\n\n↑ / ↓ or J / K   Move\nSHIFT+J/K   Next / previous letter in Dig\n← / H   Parent folder\n→ / L   Open selected folder\nENTER   Open or play\nESC   Clear search / parent / close\n/   Search\nQ   Queue track or folder\nSHIFT+Q   Play next\n1 / 2   Dig / Queue\nSPACE   Play or pause\nSHIFT+J/K or CTRL+↓/↑   Reorder queue\nDELETE / BACKSPACE   Remove queue item"
+            text: "KEYBOARD\n\n↑ / ↓ or J / K   Move\nSHIFT+J/K   Next / previous letter in Dig\n← / H   Parent folder\n→ / L   Open selected folder\nENTER   Open folder / play track\nESC   Clear search / parent / close\n/   Search\nQ   Queue track or folder\nSHIFT+Q   Play next\n1 / 2   Dig / Queue\nSPACE   Play or pause\nSHIFT+J/K or CTRL+↓/↑   Reorder queue\nDELETE / BACKSPACE   Remove queue item"
             color: root.ink
             font.family: Style.font.family
             font.pixelSize: Style.font.bodySmall

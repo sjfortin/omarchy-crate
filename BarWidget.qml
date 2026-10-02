@@ -112,9 +112,7 @@ BarWidget {
       TransportButton {
         icon: "󰒭"
         hint: "Next track"
-        available: root.service &&
-          (root.service.currentIndex + 1 < root.service.queue.length ||
-           (root.service.repeatMode === "all" && root.service.queue.length > 0))
+        available: root.service && root.service.queue.length > 0
         onActivated: root.service.next(true)
       }
     }
@@ -148,9 +146,7 @@ BarWidget {
     TransportButton {
       icon: "󰒭"
       hint: "Next track"
-      available: root.service &&
-        (root.service.currentIndex + 1 < root.service.queue.length ||
-         (root.service.repeatMode === "all" && root.service.queue.length > 0))
+      available: root.service && root.service.queue.length > 0
       onActivated: root.service.next(true)
     }
   }

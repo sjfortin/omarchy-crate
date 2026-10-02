@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import sys
 import re
+import subprocess
+import unicodedata
 
 
 AUDIO_EXTENSIONS = {
@@ -63,10 +65,15 @@ def list_folder(root_arg: str, folder_arg: str) -> dict:
     }
 
 
+def normalize(text: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFKD", text.casefold())
+                   if not unicodedata.combining(c))
+
+
 def score_match(query: str, relative: str) -> float:
-    text = relative.casefold()
-    name = os.path.basename(relative).casefold()
-    parts = query.casefold().split()
+    text = normalize(relative)
+    name = normalize(os.path.basename(relative))
+    parts = normalize(query).split()
     if not parts:
         return 0
     score = 0.0
@@ -158,11 +165,42 @@ def tracks_in_folder(root_arg: str, folder_arg: str) -> dict:
     return result
 
 
+def queue_metadata(root_arg: str, paths_arg: str) -> dict:
+    """Read tags off the UI thread; restrict probes to local library audio."""
+    root = Path(os.path.expanduser(root_arg)).resolve()
+    metadata = {}
+    try:
+        paths = json.loads(paths_arg)
+        if not isinstance(paths, list):
+            raise ValueError("Expected track paths")
+        for original in paths[:100]:
+            if not isinstance(original, str):
+                continue
+            metadata[original] = {}
+            path = Path(original).resolve()
+            if not path.is_relative_to(root) or path.suffix.lower() not in AUDIO_EXTENSIONS or not path.is_file():
+                continue
+            try:
+                result = subprocess.run(
+                    ["ffprobe", "-v", "error", "-protocol_whitelist", "file",
+                     "-show_entries", "format_tags=title,artist,album", "-of", "json", str(path)],
+                    capture_output=True, text=True, timeout=3,
+                )
+                tags = json.loads(result.stdout).get("format", {}).get("tags", {})
+                metadata[original] = {k.lower(): str(v) for k, v in tags.items()
+                                      if k.lower() in {"title", "artist", "album"}}
+            except (OSError, ValueError, subprocess.TimeoutExpired):
+                pass
+        return {"error": "", "metadata": metadata}
+    except (OSError, ValueError, RuntimeError) as error:
+        return {"error": str(error), "metadata": metadata}
+
+
 if __name__ == "__main__":
-    if len(sys.argv) != 4 or sys.argv[1] not in {"list", "search", "tracks"}:
-        print(json.dumps({"error": "usage: browse.py {list|search|tracks} ROOT ARG", "entries": []}))
+    if len(sys.argv) != 4 or sys.argv[1] not in {"list", "search", "tracks", "metadata"}:
+        print(json.dumps({"error": "usage: browse.py {list|search|tracks|metadata} ROOT ARG", "entries": []}))
         sys.exit(2)
     result = {"list": list_folder, "search": search_music,
-              "tracks": tracks_in_folder}[sys.argv[1]](sys.argv[2], sys.argv[3])
+              "tracks": tracks_in_folder, "metadata": queue_metadata}[sys.argv[1]](sys.argv[2], sys.argv[3])
     print(json.dumps(result, ensure_ascii=False))
     sys.exit(1 if result["error"] else 0)

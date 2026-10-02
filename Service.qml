@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Services.Pipewire
 
 // One service owns the player, queue, search, and current folder. The bar
 // and browser are views of this state; closing either never stops playback.
@@ -54,9 +55,9 @@ Item {
   property string pendingAlbumTrack: ""
   property string albumStartTrack: ""
 
+  signal queueEditing()
   property var queue: []
   property int currentIndex: -1
-  property string repeatMode: "off"
   property bool resumePending: false
   property bool stateLoaded: false
   readonly property string currentPath: currentIndex >= 0 && currentIndex < queue.length
@@ -71,7 +72,49 @@ Item {
   property bool paused: false
   property real positionSec: 0
   property real durationSec: 0
-  property int volume: 70
+  readonly property var outputSink: Pipewire.defaultAudioSink
+  readonly property int volume: outputSink && outputSink.audio
+    ? Math.round(outputSink.audio.volume * 100) : 0
+  readonly property bool muted: outputSink && outputSink.audio ? outputSink.audio.muted : false
+  PwObjectTracker { objects: root.outputSink ? [root.outputSink] : [] }
+
+  property var trackInfo: ({})
+  property string metadataBody: ""
+  property string notice: ""
+  function notify(text) { notice = text; noticeTimer.restart() }
+  Timer { id: noticeTimer; interval: 2500; onTriggered: root.notice = "" }
+  onQueueChanged: metadataDelay.restart()
+  Timer { id: metadataDelay; interval: 100; onTriggered: root.loadQueueMetadata() }
+  function loadQueueMetadata() {
+    if (metadataProcess.running) return
+    var missing = queue.filter(function(path) { return !trackInfo[path] })
+    if (!missing.length) return
+    metadataBody = ""
+    metadataProcess.command = ["python3", pluginDir + "/scripts/browse.py", "metadata", musicRoot, JSON.stringify(missing.slice(0, 100))]
+    metadataProcess.running = true
+  }
+  function queueTitle(path) {
+    var info = trackInfo[path] || {}
+    var base = rootDirectory || String(musicRoot).replace(/^~/, String(Quickshell.env("HOME")))
+    var relative = String(path).indexOf(base.replace(/\/$/, "") + "/") === 0
+      ? String(path).slice(base.replace(/\/$/, "").length + 1) : ""
+    var parts = relative.split("/")
+    var who = info.artist || (parts.length >= 3 ? parts[0] : "")
+    return (info.title || titleFor(path)) + (who ? "  ·  " + who : "")
+  }
+  Process {
+    id: metadataProcess
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.metadataBody = String(text || "") }
+    onExited: {
+      try {
+        var result = JSON.parse(root.metadataBody)
+        var updated = Object.assign({}, root.trackInfo, result.metadata || {})
+        root.trackInfo = updated
+        root.saveState()
+        if (!result.error) metadataDelay.restart()
+      } catch (e) {}
+    }
+  }
   property string playbackError: ""
   property bool switching: false
   property bool stopRequested: false
@@ -136,13 +179,14 @@ Item {
   function search(query) {
     searchQuery = String(query || "").trim()
     searchResults = []
+    searchError = ""; searchTruncated = false
     if (!searchQuery) {
       searchResults = []; searchLoading = false
       if (searchProcess.running) pendingSearch = " "
       return
     }
-    if (searchProcess.running) { pendingSearch = searchQuery; return }
     searchLoading = true
+    if (searchProcess.running) { pendingSearch = searchQuery; return }
     searchBody = ""
     searchProcess.command = ["python3", pluginDir + "/scripts/browse.py", "search", musicRoot, searchQuery]
     searchProcess.running = true
@@ -172,6 +216,15 @@ Item {
     albumProcess.running = true
   }
 
+  function queuedMetadata() {
+    var result = {}
+    for (var i = 0; i < queue.length; i++) {
+      var path = queue[i]
+      if (trackInfo[path]) result[path] = trackInfo[path]
+    }
+    return result
+  }
+
   function saveState() {
     if (!stateLoaded) return
     stateFile.setText(JSON.stringify({
@@ -180,7 +233,7 @@ Item {
       currentIndex: currentIndex,
       positionSec: positionSec,
       directory: directory,
-      repeatMode: repeatMode
+      trackInfo: queuedMetadata()
     }, null, 2) + "\n")
   }
 
@@ -188,6 +241,8 @@ Item {
     if (!path) return
     var next = queue.slice()
     next.push(String(path))
+    notify("Added to queue")
+    queueEditing()
     queue = next
     saveState()
   }
@@ -197,6 +252,8 @@ Item {
     var next = queue.slice()
     var index = currentIndex >= 0 ? currentIndex + 1 : 0
     next.splice(index, 0, String(path))
+    notify("Playing next")
+    queueEditing()
     queue = next
     saveState()
   }
@@ -204,6 +261,8 @@ Item {
   function playNextMany(paths) {
     if (!paths.length) return
     var index = currentIndex >= 0 ? currentIndex + 1 : 0
+    notify(paths.length + " tracks playing next")
+    queueEditing()
     queue = queue.slice(0, index).concat(paths, queue.slice(index))
     saveState()
   }
@@ -215,12 +274,8 @@ Item {
       var j = start + Math.floor(Math.random() * (i - start + 1))
       var item = next[i]; next[i] = next[j]; next[j] = item
     }
+    queueEditing()
     queue = next
-    saveState()
-  }
-
-  function cycleRepeat() {
-    repeatMode = repeatMode === "off" ? "all" : (repeatMode === "all" ? "one" : "off")
     saveState()
   }
 
@@ -228,8 +283,20 @@ Item {
     var next = queue.slice()
     for (var i = 0; i < paths.length; i++) if (paths[i]) next.push(String(paths[i]))
     if (next.length === queue.length) return
+    notify((next.length - queue.length) + " tracks added to queue")
+    queueEditing()
     queue = next
     saveState()
+  }
+
+  function playTrack(path) {
+    if (!path) return
+    var index = currentIndex >= 0 ? currentIndex + 1 : 0
+    var next = queue.slice()
+    next.splice(index, 0, String(path))
+    queueEditing()
+    queue = next
+    playAt(index)
   }
 
   function playAt(index) {
@@ -268,7 +335,7 @@ Item {
       "mpv", "--no-config", "--no-video", "--audio-display=no",
       "--terminal=no", "--idle=no", "--keep-open=no", "--ytdl=no",
       "--access-references=no", "--autoload-files=no",
-      "--audio-client-name=Crate", "--volume=" + volume,
+      "--audio-client-name=Crate", "--volume=100",
       "--input-ipc-server=" + socketPath,
       "--start=" + (resumePending ? Math.max(0, positionSec) : 0),
       "--", currentPath
@@ -331,10 +398,18 @@ Item {
   }
 
   function next(manual) {
-    if (manual !== true && repeatMode === "one" && currentIndex >= 0) { playAt(currentIndex); return }
-    if (currentIndex + 1 < queue.length) playAt(currentIndex + 1)
-    else if (repeatMode === "all" && queue.length) playAt(0)
-    else stop()
+    if (currentIndex < 0) { if (queue.length) playAt(0); return }
+    // A finished or skipped track is consumed, including the final track.
+    var index = currentIndex
+    stop()
+    var remaining = queue.slice()
+    remaining.splice(index, 1)
+    currentIndex = -1
+    queueEditing()
+    queue = remaining
+    trackTitle = ""; artist = ""; album = ""
+    if (index < queue.length) playAt(index)
+    else { saveState() }
   }
 
   function previous() {
@@ -348,6 +423,7 @@ Item {
     var wasCurrent = index === currentIndex
     var next = queue.slice()
     next.splice(index, 1)
+    queueEditing()
     queue = next
     if (wasCurrent) {
       stop()
@@ -366,6 +442,7 @@ Item {
     var next = queue.slice()
     var item = next.splice(index, 1)[0]
     next.splice(target, 0, item)
+    queueEditing()
     queue = next
     if (currentIndex === index) currentIndex = target
     else if (index < currentIndex && target >= currentIndex) currentIndex--
@@ -375,9 +452,11 @@ Item {
 
   function clearQueue() {
     if (currentIndex >= 0 && currentIndex < queue.length) {
+      queueEditing()
       queue = [queue[currentIndex]]
       currentIndex = 0
     } else {
+      queueEditing()
       queue = []
       currentIndex = -1
     }
@@ -392,8 +471,10 @@ Item {
   }
 
   function setVolume(value) {
-    volume = Math.max(0, Math.min(100, Math.round(Number(value) || 0)))
-    send(["set_property", "volume", volume])
+    if (!outputSink || !outputSink.audio) return
+    var wanted = Math.max(0, Math.min(100, Math.round(Number(value) || 0)))
+    outputSink.audio.volume = wanted / 100
+    if (wanted > 0) outputSink.audio.muted = false
   }
 
   function send(command, requestId) {
@@ -459,12 +540,13 @@ Item {
     onLoaded: {
       try {
         var saved = JSON.parse(text())
+        root.queueEditing()
         root.queue = Array.isArray(saved.queue) ? saved.queue.filter(function(p) { return typeof p === "string" }) : []
         root.currentIndex = Number.isInteger(saved.currentIndex) && saved.currentIndex >= 0
           && saved.currentIndex < root.queue.length ? saved.currentIndex : -1
         root.positionSec = Math.max(0, Number(saved.positionSec) || 0)
         root.resumePending = root.currentIndex >= 0 && root.positionSec > 0
-        root.repeatMode = ["off", "all", "one"].indexOf(saved.repeatMode) !== -1 ? saved.repeatMode : "off"
+        root.trackInfo = saved.trackInfo && typeof saved.trackInfo === "object" ? saved.trackInfo : ({})
         if (typeof saved.directory === "string" && saved.directory) root.browse(saved.directory)
       } catch (e) { /* leave the in-memory library empty */ }
       root.stateLoaded = true
@@ -575,6 +657,7 @@ Item {
               var index = root.albumStartTrack ? paths.indexOf(root.albumStartTrack) : 0
               if (index < 0) root.playbackError = "Selected track is no longer in this folder"
               else {
+                root.queueEditing()
                 root.queue = paths
                 root.playAt(index)
               }
