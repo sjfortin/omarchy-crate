@@ -9,6 +9,8 @@ import re
 import subprocess
 import unicodedata
 
+from search_index import cached_tags, index_music, indexed_entries
+
 
 AUDIO_EXTENSIONS = {
     ".aac", ".aif", ".aiff", ".alac", ".ape", ".dsf", ".dff",
@@ -70,65 +72,112 @@ def normalize(text: str) -> str:
                    if not unicodedata.combining(c))
 
 
-def score_match(query: str, relative: str, parts=None) -> float:
+def score_match(query: str, relative: str, parts=None, tags=None) -> float:
     text = normalize(relative)
     name = normalize(os.path.basename(relative))
     parts = normalize(query).split() if parts is None else parts
     if not parts:
         return 0
+    tags = tags or {}
+    title = normalize(tags.get("title") or "")
+    artist = normalize(tags.get("artist") or "")
+    album = normalize(tags.get("album") or "")
     score = 0.0
     for part in parts:
-        if part in name:
-            score += 100 - name.index(part) * 0.1
-        elif part in text:
-            score += 55 - text.index(part) * 0.05
-        else:
-            if part[0] not in text:
-                return 0
-            # A subsequence catches small omissions without a costly edit-distance scan.
-            best = 0.0
-            for word in re.split(r"[^\w]+", text):
-                if (len(part) < 3 or not len(part) <= len(word) <= len(part) + 3
-                        or word[0] != part[0]):
-                    continue
+        fields = ((title, 115), (artist, 105), (name, 100), (album, 95), (text, 55))
+        matched = False
+        for field, weight in fields:
+            if part in field:
+                score += weight - field.index(part) * 0.1
+                matched = True
+                break
+        if matched:
+            continue
+        best = 0.0
+        for word in re.split(r"[^\w]+", " ".join((name, text, title, artist, album))):
+            if len(part) < 3 or not len(part) <= len(word) <= len(part) + 3:
+                continue
+            # One adjacent transposition covers a common typing error.
+            if len(part) == len(word) and any(
+                part[:i] + part[i + 1] + part[i] + part[i + 2:] == word
+                for i in range(len(part) - 1)
+            ):
+                best = max(best, 0.9)
+            elif word[0] == part[0]:
                 letters = iter(word)
                 if all(letter in letters for letter in part):
                     best = max(best, len(part) / len(word))
-            if not best:
-                return 0
-            score += best * 35
+        if not best:
+            return 0
+        score += best * 35
+    exact = normalize(query).strip()
+    if exact and exact in (title, artist, album):
+        score += 150
     return score
 
 
-def search_music(root_arg: str, query: str) -> dict:
+def search_music(root_arg: str, query: str, kind="all", cache_path=None) -> dict:
     root = Path(os.path.expanduser(root_arg)).resolve()
     if not root.is_dir():
         return {"error": f"Music folder does not exist: {root}", "entries": []}
     query = query.strip()
     if not query:
         return {"error": "", "entries": [], "truncated": False}
+    if kind not in {"all", "track", "folder"}:
+        return {"error": "Invalid search filter", "entries": []}
     matches = []
     parts = normalize(query).split()
+    cached = indexed_entries(root_arg, cache_path)
+    if cached is not None:
+        rows, limited = cached
+        for path, relative, entry_kind, title, artist, album in rows:
+            if kind != "all" and kind != entry_kind:
+                continue
+            score = score_match(query, relative, parts,
+                                {"title": title, "artist": artist, "album": album})
+            if score:
+                matches.append((score, relative.casefold(), {
+                    "name": os.path.basename(path), "path": path, "kind": entry_kind,
+                    "relative": relative, "title": title or "",
+                    "artist": artist or "", "album": album or "",
+                }))
+        matches.sort(key=lambda item: (-item[0], item[1]))
+        entries = []
+        for _, _, entry in matches:
+            path = Path(entry["path"])
+            if (os.path.islink(path) or not path.exists()
+                    or not path.resolve().is_relative_to(root)):
+                continue
+            entries.append(entry)
+            if len(entries) > MAX_RESULTS:
+                break
+        return {"error": "", "entries": entries[:MAX_RESULTS],
+                "truncated": len(entries) > MAX_RESULTS, "scanLimited": limited,
+                "indexed": True}
     scanned = 0
     root_path = str(root)
     root_prefix = root_path.rstrip(os.sep) + os.sep
     for folder, dirs, files in os.walk(root, followlinks=False):
         dirs[:] = [name for name in dirs if not name.startswith(".")
                    and not os.path.islink(os.path.join(folder, name))]
-        for name, kind in [(name, "folder") for name in dirs] + [(name, "track") for name in files]:
+        for name, entry_kind in [(name, "folder") for name in dirs] + [(name, "track") for name in files]:
             if name.startswith("."):
                 continue
             path = os.path.join(folder, name)
-            if kind == "track" and os.path.splitext(name)[1].lower() not in AUDIO_EXTENSIONS:
+            if entry_kind == "track" and os.path.splitext(name)[1].lower() not in AUDIO_EXTENSIONS:
                 continue
             if os.path.islink(path):
                 continue
             scanned += 1
+            if kind != "all" and kind != entry_kind:
+                if scanned >= MAX_SEARCH_FILES:
+                    break
+                continue
             relative = path[len(root_prefix):]
             score = score_match(query, relative, parts)
             if score:
                 matches.append((score, relative.casefold(), {
-                    "name": name, "path": path, "kind": kind,
+                    "name": name, "path": path, "kind": entry_kind,
                     "relative": relative,
                 }))
             if scanned >= MAX_SEARCH_FILES:
@@ -138,7 +187,7 @@ def search_music(root_arg: str, query: str) -> dict:
     matches.sort(key=lambda item: (-item[0], item[1]))
     return {"error": "", "entries": [item[2] for item in matches[:MAX_RESULTS]],
             "truncated": len(matches) > MAX_RESULTS,
-            "scanLimited": scanned >= MAX_SEARCH_FILES}
+            "scanLimited": scanned >= MAX_SEARCH_FILES, "indexed": False}
 
 
 def tracks_in_folder(root_arg: str, folder_arg: str) -> dict:
@@ -167,7 +216,7 @@ def tracks_in_folder(root_arg: str, folder_arg: str) -> dict:
     return result
 
 
-def queue_metadata(root_arg: str, paths_arg: str, stream=False) -> dict:
+def queue_metadata(root_arg: str, paths_arg: str, stream=False, cache_path=None) -> dict:
     """Read tags off the UI thread; restrict probes to local library audio."""
     root = Path(os.path.expanduser(root_arg)).resolve()
     metadata = {}
@@ -183,6 +232,12 @@ def queue_metadata(root_arg: str, paths_arg: str, stream=False) -> dict:
             if not path.is_relative_to(root) or path.suffix.lower() not in AUDIO_EXTENSIONS or not path.is_file():
                 if stream:
                     print(json.dumps({"metadata": {original: {}}}), flush=True)
+                continue
+            from_cache = cached_tags(root_arg, cache_path, original)
+            if from_cache is not None:
+                metadata[original] = from_cache
+                if stream:
+                    print(json.dumps({"metadata": {original: from_cache}}, ensure_ascii=False), flush=True)
                 continue
             try:
                 result = subprocess.run(
@@ -234,8 +289,15 @@ if __name__ == "__main__":
     modes = {"list": list_folder, "search": search_music, "tracks": tracks_in_folder,
              "metadata": queue_metadata, "collect": collect_selection,
              "collect-stdin": lambda root, _: collect_selection(root, sys.stdin.readline()),
-             "metadata-stream": lambda root, paths: queue_metadata(root, paths, stream=True)}
-    if len(sys.argv) != 4 or sys.argv[1] not in modes:
+             "metadata-stream": lambda root, paths: queue_metadata(
+                 root, paths, stream=True, cache_path=sys.argv[4] if len(sys.argv) > 4 else None),
+             "search-index": lambda root, options: search_music(
+                 root, json.loads(options)["query"], json.loads(options).get("kind", "all"),
+                 json.loads(options).get("cache")),
+             "index": lambda root, cache: index_music(
+                 root, cache, progress=lambda done, total: print(
+                     json.dumps({"progress": {"done": done, "total": total}}), flush=True))}
+    if len(sys.argv) not in (4, 5) or sys.argv[1] not in modes:
         print(json.dumps({"error": "usage: browse.py MODE ROOT ARG", "entries": []}))
         sys.exit(2)
     result = modes[sys.argv[1]](sys.argv[2], sys.argv[3])

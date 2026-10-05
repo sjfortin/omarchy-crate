@@ -29,11 +29,12 @@ _No response_
 ### Maintainer notes
 
 Crate is a fast local music player for Omarchy. It uses the filesystem as the
-library and provides folder browsing, fuzzy path and filename search, album
+library and provides folder browsing, local title/artist/album tag search, album
 playback, a persistent queue, keyboard navigation, and bar playback controls.
-It requires mpv and Python 3. It reads local music and writes playback state
+It requires mpv and Python 3; FFmpeg provides tag search. It reads local music
+and writes playback state and a search index
 under the user's XDG state directory; the optional Apps launcher is installed
-only when the user runs its script. Crate 0.1.8 can pause local NTS Radio when
+only when the user runs its script. Crate can pause local NTS Radio when
 music starts; the reciprocal NTS Radio update is in PR #3. Casting is unaffected.
 
 ### Submission checklist

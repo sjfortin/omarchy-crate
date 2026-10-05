@@ -19,8 +19,9 @@ and player controls in version 0.1.12.
   searches. Hide “Queue this folder” during search because it referred to the
   underlying browsed folder, not the search results.
 - Give every track an explicit Play action. Track playback inserts and plays
-  that track while preserving queued songs. Folder Play still replaces the
-  queue; Queue and Next append or insert the entire folder.
+  that track while preserving queued songs. Folder Play replaces automatic
+  album continuation while keeping manually queued requests; Queue and Next
+  append or insert the entire folder.
 - Confirm Queue/Next actions in the player footer without moving the user.
 - Preserve queue scroll position across model replacements. Mouse removal sets
   selection to the deleted row; keyboard removal retains the nearby selection.
@@ -31,32 +32,32 @@ and player controls in version 0.1.12.
 - Make volume a system-output control, with global mute and device changes
   reflected in Crate. mpv runs at unity gain.
 
-## Recommended next work, in priority order
+## Follow-up progress
 
-1. **Index tags for search.** Search still matches filenames and folder paths,
-   not tags. A background cache keyed by path and modification time would make
-   artist/title/album searches work even for badly named files, and avoid full
-   filesystem scans per query. Refresh changed files and exclude deleted files.
-   Queue tags are cached separately; changed tags currently need cache refresh.
-2. **Cancel superseded searches.** The current worker finishes its scan before
-   starting the latest pending query. Results stay consistent, but large libraries
-   can feel slow. A persistent indexed worker would address both latency issues.
-3. **Make album replacement explicit.** Folder Play still replaces the queue.
-   Label it “Play folder” and explain replacement inline, or add an undo action.
-   Avoid a confirmation dialog for routine track Queue/Next actions.
-4. **Offer track/folder filters and batch selection** once library sizes justify
-   them. Do not add filtering controls before observing real result clutter.
-5. **Improve fuzzy matching after measuring examples.** The present subsequence
-   matcher handles omitted letters but misses transpositions. Use exact title,
-   artist and album matches before fuzzy fallbacks, and test actual failed queries.
-6. **Add queue undo.** A brief Undo action for deletion/clear would reduce the
-   cost of mistakes while preserving the consuming-queue model.
+1. **Tag search and indexing — done.** The first search starts a background
+   SQLite index of filenames, folders, title, artist, and album tags. Searches
+   use the index after its first scan. Refresh checks file modification time
+   and size, updates changed tags, and removes deleted entries. The queue tag
+   reader reuses valid indexed tags.
+2. **Cancel superseded searches — done.** A newer query stops the old worker;
+   only results for the latest query are displayed.
+3. **Explain album replacement — done.** The folder menu labels playback as
+   replacing automatic album continuation. Explicit queue requests remain in
+   place. Undo covers queue edits.
+4. **Track/folder filters and batch selection — done.** The library has over
+   14,000 files, so mixed search results warrant All/Tracks/Folders filters.
+   Dig also supports checkbox, Ctrl-click, Shift-click, and Ctrl+A selection.
+5. **Fuzzy matching — improved.** Exact title, artist, and album matches rank
+   before fuzzy fallbacks; one adjacent letter swap now matches. Examples from
+   daily use would help refine ranking further.
+6. **Queue undo — done.** Undo reverses additions, removals, reordering,
+   shuffling, and clearing during the current session.
 
 ## Validation
 
-Existing browse and playback tests, added queue logic cases, real FFmpeg tag
-fixtures, accent-insensitive search tests, plugin validation and QML lint.
-An isolated offscreen Quickshell harness also verifies final-track consumption
-and both mouse-action and keyboard-removal paths at a scrolled queue position.
-This checks handlers and layout behavior; physical key/mouse events and listening
-on the live desktop still warrant a hands-on check.
+Browse and playback tests cover real FFmpeg tags, index refresh, deleted files,
+filters, accent-insensitive search, and transposition matching. Queue tests
+cover undo and folder request ordering. Plugin validation and an isolated
+offscreen Quickshell harness check the UI, search worker, and saved state.
+Physical key/mouse events and listening on the live desktop still warrant a
+hands-on check.

@@ -424,7 +424,7 @@ Item {
                 }
               }
               Action { label: root.service && root.service.pinnedFolders.indexOf(root.service.directory) >= 0 ? "UNPIN" : "PIN"; enabled: !!root.service && !!root.service.directory; hint: "Pin this folder"; onActivated: root.service.togglePin(root.service.directory) }
-              Action { label: "REFRESH"; onActivated: if (root.service) { if (root.searching) root.service.search(searchInput.text); else root.service.refresh() } }
+              Action { label: "REFRESH"; onActivated: if (root.service) { if (root.searching) { root.service.startIndex(true); root.service.search(searchInput.text) } else root.service.refresh() } }
             }
             RowLayout {
               Layout.fillWidth: true
@@ -432,7 +432,7 @@ Item {
                 id: searchInput
                 objectName: "crateSearch"
                 Layout.fillWidth: true
-                placeholderText: "Search filenames and folders  /"
+                placeholderText: "Search titles, artists, albums, and folders  /"
                 color: root.ink; placeholderTextColor: root.dimInk
                 selectByMouse: true
                 background: Rectangle { color: Util.alpha(root.ink, 0.04); border.color: searchInput.activeFocus ? root.ink : root.ruleColor }
@@ -445,12 +445,22 @@ Item {
               Action { label: "×"; visible: root.searching; hint: "Clear search"; onActivated: { searchInput.text = ""; root.restoreKeyboardFocus() } }
             }
             Timer { id: searchDelay; interval: 200; onTriggered: if (root.service) root.service.search(searchInput.text) }
+            RowLayout {
+              Layout.fillWidth: true
+              visible: root.searching
+              spacing: 6
+              Action { label: "ALL"; strong: !!root.service && root.service.searchKind === "all"; onActivated: root.service.setSearchKind("all") }
+              Action { label: "TRACKS"; strong: !!root.service && root.service.searchKind === "track"; onActivated: root.service.setSearchKind("track") }
+              Action { label: "FOLDERS"; strong: !!root.service && root.service.searchKind === "folder"; onActivated: root.service.setSearchKind("folder") }
+              Item { Layout.fillWidth: true }
+              Label { text: root.service && root.service.indexing ? (root.service.indexTotal >= 0 ? "Indexing tags " + root.service.indexDone + "/" + root.service.indexTotal : "Scanning library…") : ""; color: root.dimInk; font.pixelSize: Style.font.caption }
+            }
             Label {
               Layout.fillWidth: true
               visible: !!text
               wrapMode: Text.Wrap
               text: !root.service ? "" : root.searching
-                ? (root.service.searchError || ((searchDelay.running || root.service.searchLoading) ? "Searching…" : root.service.searchScanLimited ? "Search stopped at 100,000 entries; some folders were not searched." : root.service.searchTruncated ? "Showing the best 100 matches. Refine your search." : root.visibleEntries.length + " matches"))
+                ? (root.service.searchError || ((searchDelay.running || root.service.searchLoading) ? "Searching…" : root.service.searchScanLimited ? "Search stopped at 100,000 entries; some folders were not searched." : root.service.searchTruncated ? "Showing the best 100 matches. Refine your search." : root.visibleEntries.length + (root.visibleEntries.length === 1 ? " match" : " matches")))
                 : (root.service.directoryError || (root.service.directoryLoading ? "Opening folder…" : root.service.truncated ? "Showing the first 5,000 items. Open a smaller folder." : ""))
               color: root.dimInk; font.pixelSize: Style.font.bodySmall; textFormat: Text.PlainText
             }
@@ -479,8 +489,8 @@ Item {
                     Layout.fillWidth: true; Layout.fillHeight: true
                     Column {
                       anchors.verticalCenter: parent.verticalCenter; width: parent.width
-                      Label { width: parent.width; text: (fileRow.modelData.kind === "folder" ? "▸  " : "") + fileRow.modelData.name; color: root.ink; elide: Text.ElideRight; textFormat: Text.PlainText; font.pixelSize: Style.font.body }
-                      Label { visible: root.searching; width: parent.width; text: fileRow.modelData.relative || ""; color: root.dimInk; elide: Text.ElideMiddle; textFormat: Text.PlainText; font.pixelSize: Style.font.caption }
+                      Label { width: parent.width; text: (fileRow.modelData.kind === "folder" ? "▸  " : "") + (fileRow.modelData.title || fileRow.modelData.name); color: root.ink; elide: Text.ElideRight; textFormat: Text.PlainText; font.pixelSize: Style.font.body }
+                      Label { visible: root.searching; width: parent.width; text: (fileRow.modelData.artist ? fileRow.modelData.artist + "  ·  " : "") + (fileRow.modelData.album ? fileRow.modelData.album + "  ·  " : "") + (fileRow.modelData.relative || ""); color: root.dimInk; elide: Text.ElideMiddle; textFormat: Text.PlainText; font.pixelSize: Style.font.caption }
                     }
                     MouseArea {
                       id: rowMouse
@@ -509,7 +519,7 @@ Item {
                   popupType: Popup.Item
                   id: fileMenu
                   MenuItem { text: "Play next"; onTriggered: { if (fileRow.modelData.kind === "folder") root.service.queueFolder(fileRow.modelData.path, true); else root.service.playNext(fileRow.modelData.path) } }
-                  MenuItem { text: "Play now"; onTriggered: { if (fileRow.modelData.kind === "folder") root.service.playFolder(fileRow.modelData.path); else root.service.playTrack(fileRow.modelData.path) } }
+                  MenuItem { text: fileRow.modelData.kind === "folder" ? "Play folder · replace album continuation" : "Play now"; onTriggered: { if (fileRow.modelData.kind === "folder") root.service.playFolder(fileRow.modelData.path); else root.service.playTrack(fileRow.modelData.path) } }
                   MenuItem { text: "Open folder"; visible: fileRow.modelData.kind === "folder"; height: visible ? implicitHeight : 0; onTriggered: root.openDirectory(fileRow.modelData.path) }
                   MenuItem { text: "Select"; onTriggered: root.toggleSelection(fileRow.index, false) }
                 }
@@ -523,7 +533,7 @@ Item {
             }
             RowLayout {
               Layout.fillWidth: true
-              Label { text: root.selectedPaths.length ? root.selectedPaths.length + " SELECTED" : root.visibleEntries.length + " ITEMS"; color: root.dimInk; font.pixelSize: Style.font.caption }
+              Label { text: root.selectedPaths.length ? root.selectedPaths.length + " SELECTED" : root.visibleEntries.length + (root.visibleEntries.length === 1 ? " ITEM" : " ITEMS"); color: root.dimInk; font.pixelSize: Style.font.caption }
               Item { Layout.fillWidth: true }
               Label { visible: !!root.service && root.service.addingFolders; text: "Adding…"; color: root.dimInk }
               Action { label: "CLEAR SELECTION"; visible: root.selectedPaths.length > 0; onActivated: root.selectedPaths = [] }

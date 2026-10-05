@@ -11,6 +11,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from browse import list_folder, search_music, tracks_in_folder, queue_metadata, collect_selection
+from search_index import index_music
 
 
 class BrowseTests(unittest.TestCase):
@@ -106,6 +107,73 @@ class BrowseTests(unittest.TestCase):
                 result = search_music(directory, "absent")
                 self.assertTrue(result["scanLimited"])
                 self.assertFalse(result["truncated"])
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg required")
+    def test_index_finds_tags_refreshes_changed_files_and_removes_deleted_files(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as state:
+            root = Path(directory)
+            cache = str(Path(state) / "search.sqlite")
+            track = root / "untitled.wav"
+
+            def make_track(title):
+                subprocess.run([
+                    "ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "anullsrc",
+                    "-t", "0.05", "-metadata", f"title={title}",
+                    "-metadata", "artist=Rare Artist", str(track),
+                ], check=True)
+
+            make_track("Secret Nocturne")
+            self.assertEqual(search_music(directory, "nocturne", cache_path=cache)["entries"], [])
+            self.assertEqual(index_music(directory, cache)["error"], "")
+            with patch("browse.os.walk", side_effect=AssertionError("indexed search walked the filesystem")):
+                result = search_music(directory, "nocturne", cache_path=cache)
+            self.assertTrue(result["indexed"])
+            self.assertEqual(result["entries"][0]["title"], "Secret Nocturne")
+            self.assertEqual(search_music(directory, "rare artist", cache_path=cache)["entries"][0]["path"], str(track))
+            self.assertEqual(search_music(directory, "rare artist", kind="folder", cache_path=cache)["entries"], [])
+            self.assertEqual(search_music(directory, "rare artist", kind="track", cache_path=cache)["entries"][0]["path"], str(track))
+            self.assertEqual(queue_metadata(directory, json.dumps([str(track)]), cache_path=cache)["metadata"][str(track)]["title"], "Secret Nocturne")
+            make_track("Hidden Aurora")
+            self.assertEqual(index_music(directory, cache)["error"], "")
+            self.assertEqual(search_music(directory, "nocturne", cache_path=cache)["entries"], [])
+            self.assertEqual(search_music(directory, "aurora", cache_path=cache)["entries"][0]["path"], str(track))
+            track.unlink()
+            self.assertEqual(search_music(directory, "aurora", cache_path=cache)["entries"], [])
+            self.assertEqual(index_music(directory, cache)["error"], "")
+            self.assertEqual(search_music(directory, "aurora", cache_path=cache)["entries"], [])
+
+    def test_adjacent_letter_swap_matches_but_ranks_below_exact(self):
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "Brainstorm.mp3").touch()
+            (Path(directory) / "Brainstrom.mp3").touch()
+            result = search_music(directory, "brainstrom")
+            self.assertEqual(result["entries"][0]["name"], "Brainstrom.mp3")
+            self.assertIn("Brainstorm.mp3", [entry["name"] for entry in result["entries"]])
+
+    def test_index_does_not_follow_folder_replaced_with_external_symlink(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside, tempfile.TemporaryDirectory() as state:
+            root = Path(directory)
+            album = root / "Album"
+            album.mkdir()
+            (album / "Secret.mp3").touch()
+            cache = str(Path(state) / "search.sqlite")
+            index_music(directory, cache)
+            album.rename(root / "Moved")
+            (Path(outside) / "Secret.mp3").touch()
+            album.symlink_to(outside, target_is_directory=True)
+            self.assertEqual(search_music(directory, "secret", cache_path=cache)["entries"], [])
+
+    def test_index_rebuilds_when_music_root_changes(self):
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second, tempfile.TemporaryDirectory() as state:
+            (Path(first) / "First.mp3").touch()
+            (Path(second) / "Second.mp3").touch()
+            cache = str(Path(state) / "search.sqlite")
+            index_music(first, cache)
+            self.assertTrue(search_music(first, "first", cache_path=cache)["indexed"])
+            index_music(second, cache)
+            self.assertTrue(search_music(second, "second", cache_path=cache)["indexed"])
+            self.assertEqual(search_music(second, "first", cache_path=cache)["entries"], [])
+            self.assertFalse(search_music(first, "first", cache_path=cache)["indexed"])
 
     def test_collection_preserves_selection_order_and_reports_partial_results(self):
         with tempfile.TemporaryDirectory() as directory:

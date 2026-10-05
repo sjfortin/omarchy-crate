@@ -14,6 +14,11 @@ ShellRoot {
     property bool canUndo: false
     property bool addingFolders: false
     property bool searchScanLimited: false
+    property bool indexing: false
+    property int indexDone: 0
+    property int indexTotal: -1
+    property bool searchIndexed: false
+    property string searchKind: "all"
     property string operationError: ""
     property string operationWarning: ""
     readonly property int upcomingCount: Math.max(0, queue.length - (currentIndex >= 0 ? currentIndex + 1 : 0))
@@ -43,6 +48,8 @@ ShellRoot {
     property string playbackError: ""
     function browse(path) {}
     function search(query) { searchQuery = query }
+    function setSearchKind(kind) { searchKind = kind }
+    function startIndex(force) {}
     function queueKind(index) { return "queued" }
     function queueTitle(path) { return path + " · Artist" }
     function removeQueueAt(index) { queueEditing(); var next = queue.slice(); next.splice(index, 1); queue = next }
@@ -137,7 +144,7 @@ ShellRoot {
     property int attempts: 0
     onTriggered: {
       if (++attempts > 80) throw new Error("Async pipeline timed out")
-      if (realService.addingFolders || realService.searchLoading || realService.directoryLoading) return
+      if (realService.addingFolders || realService.searchLoading || realService.directoryLoading || realService.indexing || !realService.searchIndexed) return
       if (realService.queue.length !== 3 || !realService.queue[0].endsWith("one.mp3") || !realService.queue[1].endsWith("two.mp3") || !realService.queue[2].endsWith("three.mp3")) throw new Error("Folder request lost or reordered")
       if (realService.searchQuery !== "three" || !realService.searchResults.some(function(e) { return e.name === "three.mp3" })) throw new Error("Stale search results")
       realService.togglePin(realService.musicRoot)

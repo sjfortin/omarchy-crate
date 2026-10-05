@@ -14,11 +14,11 @@ work. No import or account is needed.
 
 ## Dig → Queue → Play
 
-- **Dig:** Browse `~/Music` by folder or press `/` to search names and paths
-  across your collection. Search matches tracks and folders, including artist
-  and album names when they appear in the path. Fuzzy matches help with partial
-  names. Search for an artist such as Radiohead, then click the folder result
-  or choose **Open folder** from its **⋯** menu to see the albums. Choose the root from Crate's **Settings → Music folder**. This saved choice takes
+- **Dig:** Browse `~/Music` by folder or press `/` to search track titles,
+  artists, albums, filenames, and folder paths. Use **All**, **Tracks**, or
+  **Folders** to narrow results. Search for an artist such as Radiohead, then
+  click the folder result or choose **Open folder** from its **⋯** menu to see
+  the albums. Choose the root from Crate's **Settings → Music folder**. This saved choice takes
   precedence over the bar widget's default **Music folder** setting.
 - **Queue:** Add a track or a whole folder (including its subfolders), play it
   next, reorder or remove items, clear the queue, or shuffle what comes next.
@@ -61,7 +61,8 @@ Crate works the same when NTS Radio is not installed.
 - Omarchy with the Quickshell plugin system
 - `mpv` for playback
 - Python 3 for folder browsing and search
-- `ffprobe` (from FFmpeg) for queued track tags; folder names work without it
+- `ffprobe` (from FFmpeg) for track tags and tag search; filenames and folders
+  remain searchable without it
 
 With `omarchy-shell` running, install from GitHub:
 
@@ -130,12 +131,17 @@ While typing a search, press `↓` or `Tab` to move focus to the results. Digits
 the search results visible with focus on keyboard navigation.
 
 Use **QUEUE FOLDER** to add the current folder and its subfolders. Search
-runs only when requested and cancels obsolete scans; Crate does not build a separate music database.
-Search currently uses filenames and folder paths, so metadata that appears
-only inside file tags is not indexed. Large collections may take longer on the
-first search. Accent-insensitive matching supports searches such as `bjork`
-for `Björk`. Results show a title and a separate folder path; queue actions
-show a brief confirmation, and empty searches explain how to try again.
+runs only when requested and cancels obsolete scans. The first search starts a
+background scan that reads tags and creates a local search index under
+`~/.local/state/omarchy/crate/search-index.sqlite` (or `$XDG_STATE_HOME`).
+Filename and folder results appear while tags are being indexed; tag-only
+matches appear when the tag scan finishes. Later searches use the index. **Refresh**
+updates changed tags and removes deleted files; starting a new shell also
+refreshes the index on the next search. Large libraries can take time to index
+once. Accent-insensitive matching supports `bjork` for `Björk`, and one adjacent
+letter swap is tolerated. Results show a title, artist/album context, and the
+folder path. Queue actions show a brief confirmation, and empty searches
+explain how to try again.
 
 Crate volume controls the default system output, follows global volume and
 mute changes, and updates when the output device changes. mpv stays at 100%
@@ -173,9 +179,9 @@ ratings, and large library-management screens are outside its scope.
   available. Empty screens offer a way back to browsing or folder selection.
 
 Queue tags stream into the UI one track at a time in small batches, prioritizing
-current and visible tracks. Search still reads filenames and paths without a
-persistent index. Result limits and incomplete collection scans are reported
-separately.
+current and visible tracks. The search index and queue tag reader share cached
+tags, keyed by path, file modification time, and size. Result limits and
+incomplete collection scans are reported separately.
 
 To turn it off, run `omarchy plugin disable sjfortin.crate`. For a Git-installed
 plugin, `omarchy plugin remove sjfortin.crate` removes plugin files. Saved queue
@@ -188,7 +194,8 @@ before removing the plugin.
 
 `Service.qml` owns playback, queue, search, and saved state. `Browser.qml` is
 the Dig and Queue window; `BarWidget.qml` provides bar controls.
-`scripts/browse.py` reads folders, searches paths, and collects folder tracks
+`scripts/browse.py` reads folders, searches the index, and collects folder tracks;
+`scripts/search_index.py` maintains the local tag cache
 without leaving the configured music root.
 `desktop/` contains the optional Apps launcher entry.
 Playback disables mpv's reference loading and automatic companion-file loading,

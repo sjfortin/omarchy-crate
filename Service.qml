@@ -24,6 +24,7 @@ Item {
     return (xdg || String(Quickshell.env("HOME")) + "/.local/state") + "/omarchy/crate"
   }
   readonly property string statePath: stateDir + "/state.json"
+  readonly property string searchIndexPath: stateDir + "/search-index.sqlite"
   readonly property string socketPath: {
     var runtime = String(Quickshell.env("XDG_RUNTIME_DIR") || "")
     return (runtime || stateDir) + "/omarchy-crate.mpv.sock"
@@ -40,6 +41,15 @@ Item {
   property string pendingDirectory: ""
   property string scanBody: ""
   property string searchQuery: ""
+  property string searchKind: "all"
+  property bool indexing: false
+  property bool searchIndexed: false
+  property bool indexPending: false
+  property string indexAttemptedRoot: ""
+  property string indexRoot: ""
+  property string indexBody: ""
+  property int indexDone: 0
+  property int indexTotal: -1
   property var searchResults: []
   property bool searchLoading: false
   property bool searchTruncated: false
@@ -97,6 +107,7 @@ Item {
   PwObjectTracker { objects: root.outputSink ? [root.outputSink] : [] }
 
   property var trackInfo: ({})
+  property bool metadataIgnore: false
   property string notice: ""
   function notify(text) { notice = text; noticeTimer.restart() }
   Timer { id: noticeTimer; interval: 2500; onTriggered: root.notice = "" }
@@ -110,7 +121,7 @@ Item {
     var seen = {}
     var missing = candidates.filter(function(path) { if (seen[path] || trackInfo[path]) return false; seen[path] = true; return true })
     if (!missing.length) return
-    metadataProcess.command = ["python3", pluginDir + "/scripts/browse.py", "metadata-stream", musicRoot, JSON.stringify(missing.slice(0, 8))]
+    metadataProcess.command = ["python3", pluginDir + "/scripts/browse.py", "metadata-stream", musicRoot, JSON.stringify(missing.slice(0, 8)), searchIndexPath]
     metadataProcess.running = true
   }
   function queueTitle(path) {
@@ -127,6 +138,7 @@ Item {
     stdout: SplitParser {
       splitMarker: "\n"
       onRead: function(line) {
+        if (root.metadataIgnore) return
         try {
           var result = JSON.parse(String(line))
           root.trackInfo = Object.assign({}, root.trackInfo, result.metadata || {})
@@ -134,6 +146,11 @@ Item {
       }
     }
     onExited: function(code) {
+      if (root.metadataIgnore) {
+        root.metadataIgnore = false
+        metadataDelay.restart()
+        return
+      }
       root.saveState()
       if (code === 0) metadataDelay.restart()
     }
@@ -179,6 +196,15 @@ Item {
     var wanted = userMusicRoot || String(path || "~/Music").trim() || "~/Music"
     if (wanted === musicRoot) return
     search("")
+    indexAttemptedRoot = ""
+    indexPending = false
+    indexRestart.stop()
+    if (indexProcess.running) indexProcess.running = false
+    if (metadataProcess.running) {
+      metadataIgnore = true
+      metadataProcess.running = false
+    }
+    trackInfo = ({})
     musicRoot = wanted
     rootDirectory = ""
     directory = ""
@@ -199,7 +225,38 @@ Item {
     scan.running = true
   }
 
-  function refresh() { browse(directory || musicRoot) }
+  function refresh() {
+    browse(directory || musicRoot)
+    trackInfo = ({})
+    metadataDelay.restart()
+    startIndex(true)
+  }
+
+  function setSearchKind(kind) {
+    if (["all", "track", "folder"].indexOf(kind) < 0 || kind === searchKind) return
+    searchKind = kind
+    if (searchQuery) search(searchQuery)
+  }
+
+  function startIndex(force) {
+    if (!force && indexAttemptedRoot === musicRoot) return
+    if (stateDirInit.running) { indexPending = true; return }
+    if (indexProcess.running) {
+      indexPending = true
+      indexProcess.running = false
+      indexRestart.restart()
+      return
+    }
+    indexPending = false
+    indexAttemptedRoot = musicRoot
+    indexRoot = musicRoot
+    indexBody = ""
+    indexDone = 0
+    indexTotal = -1
+    indexing = true
+    indexProcess.command = ["python3", pluginDir + "/scripts/browse.py", "index", musicRoot, searchIndexPath]
+    indexProcess.running = true
+  }
 
   function search(query) {
     searchQuery = String(query || "").trim()
@@ -212,9 +269,11 @@ Item {
       return
     }
     if (!searchQuery) return
+    startIndex(false)
     searchBody = ""
     searchActive = true
-    searchProcess.command = ["python3", pluginDir + "/scripts/browse.py", "search", musicRoot, searchQuery]
+    searchProcess.command = ["python3", pluginDir + "/scripts/browse.py", "search-index", musicRoot,
+      JSON.stringify({query: searchQuery, kind: searchKind, cache: searchIndexPath})]
     searchProcess.running = true
   }
 
@@ -716,7 +775,53 @@ Item {
     id: stateDirInit
     running: true
     command: ["mkdir", "-p", root.stateDir]
-    onExited: stateFile.reload()
+    onExited: {
+      stateFile.reload()
+      if (root.indexPending) root.startIndex(true)
+    }
+  }
+
+  Process {
+    id: indexProcess
+    running: false
+    stdout: SplitParser {
+      splitMarker: "\n"
+      onRead: function(line) {
+        try {
+          var message = JSON.parse(String(line))
+          if (message.progress) {
+            root.indexDone = Number(message.progress.done) || 0
+            root.indexTotal = Number(message.progress.total) || 0
+          } else root.indexBody = String(line)
+        } catch (e) {}
+      }
+    }
+    onExited: function(code) {
+      if (root.indexPending) {
+        Qt.callLater(function() { root.startIndex(true) })
+        return
+      }
+      root.indexing = false
+      try {
+        var result = JSON.parse(root.indexBody)
+        if (result.error) root.operationWarning = String(result.error)
+        else if (result.scanLimited) root.operationWarning = "Only the first 100,000 library entries were indexed."
+      } catch (e) { if (code !== 0) root.operationWarning = "Could not refresh the search index" }
+      if (code === 0) {
+        if (metadataProcess.running) {
+          root.metadataIgnore = true
+          metadataProcess.running = false
+        }
+        root.trackInfo = ({})
+        metadataDelay.restart()
+      }
+      if (root.searchQuery) root.search(root.searchQuery)
+    }
+  }
+  Timer {
+    id: indexRestart
+    interval: 150
+    onTriggered: if (root.indexPending && !indexProcess.running) root.startIndex(true)
   }
 
   FileView {
@@ -808,6 +913,7 @@ Item {
         root.searchResults = Array.isArray(result.entries) ? result.entries : []
         root.searchTruncated = result.truncated === true
         root.searchScanLimited = result.scanLimited === true
+        root.searchIndexed = result.indexed === true
         root.searchError = String(result.error || "")
       } catch (e) { root.searchResults = []; root.searchError = "Search failed" }
     }
