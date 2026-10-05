@@ -115,7 +115,8 @@ The player shows elapsed time and total track length beneath the seek bar.
 | `Backspace` / `Esc` | Parent folder / clear search / close |
 | `/` | Search the collection |
 | `q` / `Shift+q` | Queue selection / play it next |
-| `Space` | Play or pause |
+| `Space` / `p` | Play or pause |
+| `n` / `b` | Next / previous track |
 | `Shift+j` / `Shift+k` or `Ctrl+↓` / `Ctrl+↑` in Queue | Move selected queue item down / up |
 | `Delete` / `Backspace` | Remove selected queue item |
 | `Ctrl+Z` | Undo a queue edit |

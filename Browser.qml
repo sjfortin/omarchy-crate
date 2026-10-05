@@ -347,6 +347,9 @@ Item {
           else if ((event.key === Qt.Key_Right || event.key === Qt.Key_L) && root.page === "files") root.openSelectedFolder()
           else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) root.activateCursor()
           else if (event.key === Qt.Key_Space && root.service) root.service.togglePlayback()
+          else if (event.key === Qt.Key_P && event.modifiers === Qt.NoModifier && root.service) root.service.togglePlayback()
+          else if (event.key === Qt.Key_N && event.modifiers === Qt.NoModifier && root.service) root.service.next(true)
+          else if (event.key === Qt.Key_B && event.modifiers === Qt.NoModifier && root.service) root.service.previous()
           else if (event.key === Qt.Key_Q) root.queueSelection((event.modifiers & Qt.ShiftModifier) !== 0)
           else if (event.key === Qt.Key_Slash) { root.navigate("files"); searchInput.forceActiveFocus() }
           else if ((event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) && root.page === "queue") root.removeQueueSelection()
@@ -366,7 +369,7 @@ Item {
           Layout.margins: 14
           spacing: 10
           CrateMark { Layout.preferredWidth: 22; Layout.preferredHeight: 22; ink: root.ink; paper: root.paper }
-          Label { text: "CRATE"; color: root.ink; font.bold: true; font.pixelSize: Style.font.subtitle }
+          CrateLabel { text: "CRATE"; color: root.ink; font.bold: true; font.pixelSize: Style.font.subtitle }
           Item { Layout.fillWidth: true }
           Action { label: "FOLDERS"; hint: "Recent and pinned folders"; onActivated: placesDialog.open() }
           Action { label: "SETTINGS"; onActivated: { folderPath.text = root.service ? root.service.musicRoot : "~/Music"; folderSettings.open() } }
@@ -383,7 +386,7 @@ Item {
             Action { required property var modelData; label: modelData.label; strong: root.page === modelData.key; onActivated: root.navigate(modelData.key) }
           }
           Item { Layout.fillWidth: true }
-          Label { text: root.service ? root.service.upcomingCount + " UP NEXT" : ""; color: root.dimInk; font.pixelSize: Style.font.caption }
+          CrateLabel { text: root.service ? root.service.upcomingCount + " UP NEXT" : ""; color: root.dimInk; font.pixelSize: Style.font.caption }
           Action { label: "UNDO"; enabled: !!root.service && root.service.canUndo; hint: "Undo queue edit · Ctrl+Z"; onActivated: root.service.undoQueue() }
         }
         // Persistent errors stay separate from short confirmations.
@@ -396,7 +399,7 @@ Item {
           RowLayout {
             id: errorRow
             anchors.fill: parent; anchors.margins: 8
-            Label { Layout.fillWidth: true; text: root.service ? (root.service.playbackError || root.service.operationError || root.service.operationWarning) : ""; color: root.ink; wrapMode: Text.Wrap; textFormat: Text.PlainText }
+            CrateLabel { Layout.fillWidth: true; text: root.service ? (root.service.playbackError || root.service.operationError || root.service.operationWarning) : ""; color: root.ink; wrapMode: Text.Wrap; textFormat: Text.PlainText }
             Action { label: "RETRY"; visible: !!root.service && !!root.service.playbackError && !!root.service.currentPath; onActivated: root.service.retryPlayback() }
             Action { label: "SKIP"; visible: !!root.service && !!root.service.playbackError && !!root.service.currentPath; onActivated: { root.service.playbackError = ""; root.service.next(true) } }
             Action { label: "×"; hint: "Dismiss message"; onActivated: { root.service.playbackError = ""; root.service.operationError = ""; root.service.operationWarning = "" } }
@@ -429,6 +432,8 @@ Item {
             RowLayout {
               Layout.fillWidth: true
               TextField {
+                font.family: Style.font.family
+                font.pixelSize: Style.font.bodySmall
                 id: searchInput
                 objectName: "crateSearch"
                 Layout.fillWidth: true
@@ -453,9 +458,9 @@ Item {
               Action { label: "TRACKS"; strong: !!root.service && root.service.searchKind === "track"; onActivated: root.service.setSearchKind("track") }
               Action { label: "FOLDERS"; strong: !!root.service && root.service.searchKind === "folder"; onActivated: root.service.setSearchKind("folder") }
               Item { Layout.fillWidth: true }
-              Label { text: root.service && root.service.indexing ? (root.service.indexTotal >= 0 ? "Indexing tags " + root.service.indexDone + "/" + root.service.indexTotal : "Scanning library…") : ""; color: root.dimInk; font.pixelSize: Style.font.caption }
+              CrateLabel { text: root.service && root.service.indexing ? (root.service.indexTotal >= 0 ? "Indexing tags " + root.service.indexDone + "/" + root.service.indexTotal : "Scanning library…") : ""; color: root.dimInk; font.pixelSize: Style.font.caption }
             }
-            Label {
+            CrateLabel {
               Layout.fillWidth: true
               visible: !!text
               wrapMode: Text.Wrap
@@ -489,8 +494,8 @@ Item {
                     Layout.fillWidth: true; Layout.fillHeight: true
                     Column {
                       anchors.verticalCenter: parent.verticalCenter; width: parent.width
-                      Label { width: parent.width; text: (fileRow.modelData.kind === "folder" ? "▸  " : "") + (fileRow.modelData.title || fileRow.modelData.name); color: root.ink; elide: Text.ElideRight; textFormat: Text.PlainText; font.pixelSize: Style.font.body }
-                      Label { visible: root.searching; width: parent.width; text: (fileRow.modelData.artist ? fileRow.modelData.artist + "  ·  " : "") + (fileRow.modelData.album ? fileRow.modelData.album + "  ·  " : "") + (fileRow.modelData.relative || ""); color: root.dimInk; elide: Text.ElideMiddle; textFormat: Text.PlainText; font.pixelSize: Style.font.caption }
+                      CrateLabel { width: parent.width; text: (fileRow.modelData.kind === "folder" ? "▸  " : "") + (fileRow.modelData.title || fileRow.modelData.name); color: root.ink; elide: Text.ElideRight; textFormat: Text.PlainText; font.pixelSize: Style.font.body }
+                      CrateLabel { visible: root.searching; width: parent.width; text: (fileRow.modelData.artist ? fileRow.modelData.artist + "  ·  " : "") + (fileRow.modelData.album ? fileRow.modelData.album + "  ·  " : "") + (fileRow.modelData.relative || ""); color: root.dimInk; elide: Text.ElideMiddle; textFormat: Text.PlainText; font.pixelSize: Style.font.caption }
                     }
                     MouseArea {
                       id: rowMouse
@@ -516,6 +521,7 @@ Item {
                   Action { label: "⋯"; hint: "More actions for " + fileRow.modelData.name; onActivated: fileMenu.popup() }
                 }
                 Menu {
+                  font.family: Style.font.family
                   popupType: Popup.Item
                   id: fileMenu
                   MenuItem { text: "Play next"; onTriggered: { if (fileRow.modelData.kind === "folder") root.service.queueFolder(fileRow.modelData.path, true); else root.service.playNext(fileRow.modelData.path) } }
@@ -527,15 +533,15 @@ Item {
               Column {
                 anchors.centerIn: parent; width: Math.min(parent.width, 430); spacing: 14
                 visible: fileList.count === 0 && !!root.service && !root.service.directoryLoading && !root.service.searchLoading && !searchDelay.running
-                Label { width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; color: root.ink; text: root.searching ? "No matches. Try a filename, artist folder, or album folder." : root.service && root.service.directoryError ? "Choose a music folder to start digging." : "No audio files here. Try another folder." }
+                CrateLabel { width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; color: root.ink; text: root.searching ? "No matches. Try a filename, artist folder, or album folder." : root.service && root.service.directoryError ? "Choose a music folder to start digging." : "No audio files here. Try another folder." }
                 Action { anchors.horizontalCenter: parent.horizontalCenter; label: root.searching ? "CLEAR SEARCH" : "CHOOSE MUSIC FOLDER"; onActivated: { if (root.searching) searchInput.text = ""; else { folderPath.text = root.service.musicRoot; folderSettings.open() } } }
               }
             }
             RowLayout {
               Layout.fillWidth: true
-              Label { text: root.selectedPaths.length ? root.selectedPaths.length + " SELECTED" : root.visibleEntries.length + (root.visibleEntries.length === 1 ? " ITEM" : " ITEMS"); color: root.dimInk; font.pixelSize: Style.font.caption }
+              CrateLabel { text: root.selectedPaths.length ? root.selectedPaths.length + " SELECTED" : root.visibleEntries.length + (root.visibleEntries.length === 1 ? " ITEM" : " ITEMS"); color: root.dimInk; font.pixelSize: Style.font.caption }
               Item { Layout.fillWidth: true }
-              Label { visible: !!root.service && root.service.addingFolders; text: "Adding…"; color: root.dimInk }
+              CrateLabel { visible: !!root.service && root.service.addingFolders; text: "Adding…"; color: root.dimInk }
               Action { label: "CLEAR SELECTION"; visible: root.selectedPaths.length > 0; onActivated: root.selectedPaths = [] }
               Action { label: root.selectedPaths.length ? "QUEUE SELECTED" : "QUEUE FOLDER"; visible: root.selectedPaths.length > 0 || !root.searching; enabled: !!root.service && !root.service.directoryLoading; onActivated: { if (root.selectedPaths.length) root.queueSelection(false); else root.service.queueFolder(root.service.directory || root.service.musicRoot) } }
               Action { label: "NEXT"; visible: root.selectedPaths.length > 0; onActivated: root.queueSelection(true) }
@@ -544,7 +550,7 @@ Item {
           ColumnLayout {
             RowLayout {
               Layout.fillWidth: true
-              Label { Layout.fillWidth: true; text: root.service ? root.service.upcomingCount + " UP NEXT" : ""; color: root.ink; font.bold: true }
+              CrateLabel { Layout.fillWidth: true; text: root.service ? root.service.upcomingCount + " UP NEXT" : ""; color: root.ink; font.bold: true }
               Action { label: "SAVE MIXTAPE"; enabled: !!root.service && root.service.queue.length > 0; onActivated: { tapeName.text = ""; saveTapeDialog.open() } }
               Action { label: "SHUFFLE"; enabled: !!root.service && root.service.upcomingCount > 1; onActivated: root.service.shuffleQueue() }
               Action { label: "CLEAR OTHERS"; enabled: !!root.service && root.service.queue.length > (root.service.currentIndex >= 0 ? 1 : 0); onActivated: root.service.clearQueue() }
@@ -571,8 +577,8 @@ Item {
                     Layout.fillWidth: true; Layout.fillHeight: true
                     Column {
                       anchors.verticalCenter: parent.verticalCenter; width: parent.width
-                      Label { width: parent.width; color: root.ink; font.pixelSize: Style.font.bodySmall; textFormat: Text.PlainText; elide: Text.ElideRight; text: root.service ? root.service.queueTitle(queueRow.modelData) : "" }
-                      Label { color: root.dimInk; font.pixelSize: Style.font.caption; text: root.service && root.service.currentIndex === queueRow.index ? (root.service.playing ? "NOW PLAYING" : "PAUSED") : root.service && queueRow.index < root.service.currentIndex ? "EARLIER IN QUEUE" : root.service && root.service.queueKind(queueRow.index) === "album" ? "ALBUM CONTINUATION" : "QUEUED" }
+                      CrateLabel { width: parent.width; color: root.ink; font.pixelSize: Style.font.bodySmall; textFormat: Text.PlainText; elide: Text.ElideRight; text: root.service ? root.service.queueTitle(queueRow.modelData) : "" }
+                      CrateLabel { color: root.dimInk; font.pixelSize: Style.font.caption; text: root.service && root.service.currentIndex === queueRow.index ? (root.service.playing ? "NOW PLAYING" : "PAUSED") : root.service && queueRow.index < root.service.currentIndex ? "EARLIER IN QUEUE" : root.service && root.service.queueKind(queueRow.index) === "album" ? "ALBUM CONTINUATION" : "QUEUED" }
                     }
                     MouseArea { id: queueMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.cursor = queueRow.index; root.service.playAt(queueRow.index); root.restoreKeyboardFocus() } }
                     ToolTip.visible: queueMouse.containsMouse; ToolTip.delay: 700; ToolTip.text: root.service ? root.service.queueTitle(queueRow.modelData) + "\n" + queueRow.modelData : ""
@@ -584,14 +590,14 @@ Item {
               }
               Column {
                 anchors.centerIn: parent; spacing: 14; visible: queueList.count === 0
-                Label { text: "Your queue is empty."; color: root.ink }
+                CrateLabel { text: "Your queue is empty."; color: root.ink }
                 Action { label: "BROWSE MUSIC"; onActivated: root.navigate("files") }
               }
             }
           }
           ColumnLayout {
-            Label { text: "MIXTAPES"; color: root.ink; font.bold: true }
-            Label { Layout.fillWidth: true; text: "Save a queue to listen again. Mixtapes reference your original music files."; color: root.dimInk; wrapMode: Text.Wrap }
+            CrateLabel { text: "MIXTAPES"; color: root.ink; font.bold: true }
+            CrateLabel { Layout.fillWidth: true; text: "Save a queue to listen again. Mixtapes reference your original music files."; color: root.dimInk; wrapMode: Text.Wrap }
             ListView {
               Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 8
               model: root.service ? root.service.mixtapes : []
@@ -600,29 +606,29 @@ Item {
                 required property var modelData
                 required property int index
                 width: ListView.view.width - 12
-                Label { Layout.fillWidth: true; text: modelData.name + " · " + modelData.paths.length + " tracks"; color: root.ink; textFormat: Text.PlainText; elide: Text.ElideRight }
+                CrateLabel { Layout.fillWidth: true; text: modelData.name + " · " + modelData.paths.length + " tracks"; color: root.ink; textFormat: Text.PlainText; elide: Text.ElideRight }
                 Action { label: "+ QUEUE"; onActivated: root.service.loadMixtape(index, false) }
                 Action { label: "PLAY"; onActivated: root.service.loadMixtape(index, true) }
                 Action { label: "DELETE"; onActivated: { deleteTapeDialog.tapeIndex = index; deleteTapeDialog.open() } }
               }
-              Label { anchors.centerIn: parent; visible: !root.service || !root.service.mixtapes.length; text: "Build a queue, then choose Save Mixtape."; color: root.dimInk }
+              CrateLabel { anchors.centerIn: parent; visible: !root.service || !root.service.mixtapes.length; text: "Build a queue, then choose Save Mixtape."; color: root.dimInk }
             }
           }
         }
         Rectangle { Layout.fillWidth: true; height: 1; color: root.ruleColor }
         ColumnLayout {
           Layout.fillWidth: true; Layout.margins: 12; spacing: 3
-          Label { Layout.fillWidth: true; text: root.service ? root.service.displayTitle : "Nothing playing"; textFormat: Text.PlainText; elide: Text.ElideRight; color: root.ink; font.bold: true; font.pixelSize: Style.font.bodySmall }
+          CrateLabel { Layout.fillWidth: true; text: root.service ? root.service.displayTitle : "Nothing playing"; textFormat: Text.PlainText; elide: Text.ElideRight; color: root.ink; font.bold: true; font.pixelSize: Style.font.bodySmall }
           RowLayout {
             Layout.fillWidth: true; spacing: 6
             Action { label: "|◀"; hint: "Previous track / restart"; enabled: !!root.service && (!!root.service.currentPath || root.service.history.length > 0); onActivated: root.service.previous() }
             Action { label: root.service && root.service.playing ? "PAUSE" : "PLAY"; strong: true; enabled: !!root.service && root.service.queue.length > 0; onActivated: root.service.togglePlayback() }
             Action { label: "▶|"; hint: "Next track"; enabled: !!root.service && root.service.queue.length > 0; onActivated: root.service.next(true) }
             Item { Layout.fillWidth: true }
-            Label { text: "System volume"; color: root.dimInk; font.pixelSize: Style.font.caption }
+            CrateLabel { text: "System volume"; color: root.dimInk; font.pixelSize: Style.font.caption }
             Action { label: root.service && root.service.muted ? "UNMUTE" : "MUTE"; hint: "Affects all apps on the default output"; onActivated: if (root.service) root.service.toggleMute() }
             Action { label: "−"; hint: "Lower system volume"; onActivated: if (root.service) root.service.setVolume(root.service.volume - 5) }
-            Label { text: root.service ? root.service.volume + "%" : ""; color: root.ink; font.pixelSize: Style.font.caption }
+            CrateLabel { text: root.service ? root.service.volume + "%" : ""; color: root.ink; font.pixelSize: Style.font.caption }
             Action { label: "+"; hint: "Raise system volume"; onActivated: if (root.service) root.service.setVolume(root.service.volume + 5) }
           }
           Slider {
@@ -643,12 +649,13 @@ Item {
           }
           RowLayout {
             Layout.fillWidth: true
-            Label { Layout.fillWidth: true; text: root.service && root.service.notice ? root.service.notice : "SPACE Play/pause · / Search · Q Queue · ? Help"; color: root.dimInk; elide: Text.ElideRight; font.pixelSize: Style.font.caption; Accessible.role: Accessible.StaticText }
-            Label { text: root.service && root.service.currentPath ? root.formatTime(root.service.positionSec) + " / " + (root.service.durationSec > 0 ? root.formatTime(root.service.durationSec) : "--:--") : ""; color: root.ink; font.pixelSize: Style.font.caption }
+            CrateLabel { Layout.fillWidth: true; text: root.service && root.service.notice ? root.service.notice : "SPACE/P Play/pause · N Next · B Previous · ? Help"; color: root.dimInk; elide: Text.ElideRight; font.pixelSize: Style.font.caption; Accessible.role: Accessible.StaticText }
+            CrateLabel { text: root.service && root.service.currentPath ? root.formatTime(root.service.positionSec) + " / " + (root.service.durationSec > 0 ? root.formatTime(root.service.durationSec) : "--:--") : ""; color: root.ink; font.pixelSize: Style.font.caption }
           }
         }
       }
       Dialog {
+        font.family: Style.font.family
         popupType: Popup.Item
         id: folderSettings
         objectName: "crateFolderSettings"
@@ -661,13 +668,14 @@ Item {
         onRejected: root.restoreKeyboardFocus()
         ColumnLayout {
           anchors.fill: parent
-          Label { Layout.fillWidth: true; text: "Choose the top folder containing your music."; wrapMode: Text.Wrap }
-          TextField { id: folderPath; Layout.fillWidth: true; selectByMouse: true; Accessible.name: "Music folder path"; onAccepted: folderSettings.accept() }
+          CrateLabel { Layout.fillWidth: true; text: "Choose the top folder containing your music."; wrapMode: Text.Wrap }
+          TextField { font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; id: folderPath; Layout.fillWidth: true; selectByMouse: true; Accessible.name: "Music folder path"; onAccepted: folderSettings.accept() }
           Action { label: "BROWSE…"; onActivated: folderPicker.open() }
         }
       }
       FolderDialog { id: folderPicker; title: "Choose music folder"; onAccepted: folderPath.text = decodeURIComponent(String(selectedFolder).replace(/^file:\/\//, "")) }
       Dialog {
+        font.family: Style.font.family
         popupType: Popup.Item
         id: saveTapeDialog
         title: "Save queue as mixtape"
@@ -677,8 +685,8 @@ Item {
         onClosed: root.restoreKeyboardFocus()
         ColumnLayout {
           anchors.fill: parent
-          TextField { id: tapeName; Layout.fillWidth: true; placeholderText: "Mixtape name"; Accessible.name: "Mixtape name"; maximumLength: 100; onAccepted: saveTapeButton.activated() }
-          Label { Layout.fillWidth: true; visible: !!root.service && root.service.mixtapes.some(function(t) { return t.name === tapeName.text.trim() }); text: "That name already exists. Choose another name."; wrapMode: Text.Wrap }
+          TextField { font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; id: tapeName; Layout.fillWidth: true; placeholderText: "Mixtape name"; Accessible.name: "Mixtape name"; maximumLength: 100; onAccepted: saveTapeButton.activated() }
+          CrateLabel { Layout.fillWidth: true; visible: !!root.service && root.service.mixtapes.some(function(t) { return t.name === tapeName.text.trim() }); text: "That name already exists. Choose another name."; wrapMode: Text.Wrap }
           RowLayout {
             Action { id: saveTapeButton; label: "SAVE"; enabled: !!tapeName.text.trim() && !!root.service && !root.service.mixtapes.some(function(t) { return t.name === tapeName.text.trim() }); onActivated: if (enabled && root.service.saveMixtape(tapeName.text)) saveTapeDialog.close() }
             Action { label: "CANCEL"; onActivated: saveTapeDialog.close() }
@@ -686,16 +694,18 @@ Item {
         }
       }
       Dialog {
+        font.family: Style.font.family
         popupType: Popup.Item
         id: deleteTapeDialog
         property int tapeIndex: -1
         title: "Delete mixtape?"
         anchors.centerIn: parent; modal: true; standardButtons: Dialog.Yes | Dialog.No
-        Label { text: "Only the saved list will be removed." }
+        CrateLabel { text: "Only the saved list will be removed." }
         onAccepted: root.service.removeMixtape(tapeIndex)
         onClosed: root.restoreKeyboardFocus()
       }
       Dialog {
+        font.family: Style.font.family
         popupType: Popup.Item
         id: placesDialog
         objectName: "cratePlaces"
@@ -707,13 +717,13 @@ Item {
           anchors.fill: parent; contentWidth: availableWidth
           ColumnLayout {
             width: parent.width
-            Label { text: "PINNED"; font.bold: true }
-            Label { visible: !root.service || !root.service.pinnedFolders.length; text: "Use Pin while browsing to keep a folder here." }
+            CrateLabel { text: "PINNED"; font.bold: true }
+            CrateLabel { visible: !root.service || !root.service.pinnedFolders.length; text: "Use Pin while browsing to keep a folder here." }
             Repeater {
               model: root.service ? root.service.pinnedFolders : []
               Action { required property string modelData; Layout.fillWidth: true; label: modelData; hint: modelData; onActivated: { placesDialog.close(); root.navigate("files"); root.openDirectory(modelData) } }
             }
-            Label { text: "RECENT"; font.bold: true }
+            CrateLabel { text: "RECENT"; font.bold: true }
             Repeater {
               model: root.service ? root.service.recentFolders : []
               Action { required property string modelData; Layout.fillWidth: true; label: modelData; hint: modelData; onActivated: { placesDialog.close(); root.navigate("files"); root.openDirectory(modelData) } }
@@ -722,6 +732,7 @@ Item {
         }
       }
       Dialog {
+        font.family: Style.font.family
         popupType: Popup.Item
         id: helpDialog
         objectName: "crateHelp"
@@ -731,10 +742,15 @@ Item {
         onClosed: { root.helpOpen = false; root.restoreKeyboardFocus() }
         ScrollView {
           anchors.fill: parent
-          Label { text: "↑ / ↓ or J / K   Move selection\nShift+J / K   Jump letter in Dig\n← / H   Parent folder\n→ / L   Open folder\nEnter   Open folder / play track\nEsc   Clear selection / search / parent / close\n/   Search filenames and folders\nQ / Shift+Q   Queue / play next\nCtrl+click   Select multiple items\nShift+click   Select a range\nCtrl+A   Select all visible results\n1 / 2 / 3   Dig / Queue / Mixtapes\nSpace   Play / pause\nShift+J/K or Ctrl+↓/↑   Reorder queue\nDelete / Backspace   Remove queue item\nCtrl+Z   Undo queue edit\nTab / Shift+Tab   Focus controls\nArrow keys on seek slider   Seek"; lineHeight: 1.5 }
+          CrateLabel { text: "↑ / ↓ or J / K   Move selection\nShift+J / K   Jump letter in Dig\n← / H   Parent folder\n→ / L   Open folder\nEnter   Open folder / play track\nEsc   Clear selection / search / parent / close\n/   Search titles, artists, and folders\nQ / Shift+Q   Queue / play next\nCtrl+click   Select multiple items\nShift+click   Select a range\nCtrl+A   Select all visible results\n1 / 2 / 3   Dig / Queue / Mixtapes\nSpace / P   Play or pause\nN / B   Next / previous track\nShift+J/K or Ctrl+↓/↑   Reorder queue\nDelete / Backspace   Remove queue item\nCtrl+Z   Undo queue edit\nTab / Shift+Tab   Focus controls\nArrow keys on seek slider   Seek"; lineHeight: 1.5 }
         }
       }
     }
+  }
+  component CrateLabel: Label {
+    font.family: Style.font.family
+    font.pixelSize: Style.font.bodySmall
+    color: root.ink
   }
   component Action: Button {
     id: action
@@ -743,6 +759,7 @@ Item {
     property bool strong: false
     signal activated()
     text: label
+    font.family: Style.font.family
     implicitWidth: Math.max(30, caption.implicitWidth + 18)
     implicitHeight: 32
     focusPolicy: Qt.StrongFocus
