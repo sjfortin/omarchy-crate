@@ -47,9 +47,25 @@ Item {
   property string searchBody: ""
   property string pendingSearch: ""
   property string folderQueueBody: ""
-  property string pendingFolder: ""
+  property string selectionPayload: ""
+  property var folderRequests: []
+  property bool folderRequestActive: false
+  readonly property bool addingFolders: folderRequestActive || folderRequests.length > 0
   property bool folderQueueNext: false
-  property bool pendingFolderNext: false
+  property bool searchActive: false
+  property bool searchScanLimited: false
+  property string operationError: ""
+  property string operationWarning: ""
+  property string userMusicRoot: ""
+  property var recentFolders: []
+  property var pinnedFolders: []
+  property var mixtapes: []
+  property var history: []
+  property var undoStack: []
+  property var visibleMetadataPaths: []
+  readonly property int upcomingCount: Math.max(0, queue.length - (currentIndex >= 0 ? currentIndex + 1 : 0))
+  readonly property bool canUndo: undoStack.length > 0
+  property real previousPressedAt: 0
   property string albumBody: ""
   property string pendingAlbum: ""
   property string pendingAlbumTrack: ""
@@ -57,6 +73,8 @@ Item {
 
   signal queueEditing()
   property var queue: []
+  // Per-entry provenance: duplicate paths can have different priorities.
+  property var queueKinds: []
   property int currentIndex: -1
   property bool resumePending: false
   property bool stateLoaded: false
@@ -79,18 +97,20 @@ Item {
   PwObjectTracker { objects: root.outputSink ? [root.outputSink] : [] }
 
   property var trackInfo: ({})
-  property string metadataBody: ""
   property string notice: ""
   function notify(text) { notice = text; noticeTimer.restart() }
   Timer { id: noticeTimer; interval: 2500; onTriggered: root.notice = "" }
   onQueueChanged: metadataDelay.restart()
+  onVisibleMetadataPathsChanged: metadataDelay.restart()
+  onCurrentPathChanged: metadataDelay.restart()
   Timer { id: metadataDelay; interval: 100; onTriggered: root.loadQueueMetadata() }
   function loadQueueMetadata() {
     if (metadataProcess.running) return
-    var missing = queue.filter(function(path) { return !trackInfo[path] })
+    var candidates = (currentPath ? [currentPath] : []).concat(visibleMetadataPaths, queue)
+    var seen = {}
+    var missing = candidates.filter(function(path) { if (seen[path] || trackInfo[path]) return false; seen[path] = true; return true })
     if (!missing.length) return
-    metadataBody = ""
-    metadataProcess.command = ["python3", pluginDir + "/scripts/browse.py", "metadata", musicRoot, JSON.stringify(missing.slice(0, 100))]
+    metadataProcess.command = ["python3", pluginDir + "/scripts/browse.py", "metadata-stream", musicRoot, JSON.stringify(missing.slice(0, 8))]
     metadataProcess.running = true
   }
   function queueTitle(path) {
@@ -104,17 +124,21 @@ Item {
   }
   Process {
     id: metadataProcess
-    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.metadataBody = String(text || "") }
-    onExited: {
-      try {
-        var result = JSON.parse(root.metadataBody)
-        var updated = Object.assign({}, root.trackInfo, result.metadata || {})
-        root.trackInfo = updated
-        root.saveState()
-        if (!result.error) metadataDelay.restart()
-      } catch (e) {}
+    stdout: SplitParser {
+      splitMarker: "\n"
+      onRead: function(line) {
+        try {
+          var result = JSON.parse(String(line))
+          root.trackInfo = Object.assign({}, root.trackInfo, result.metadata || {})
+        } catch (e) {}
+      }
+    }
+    onExited: function(code) {
+      root.saveState()
+      if (code === 0) metadataDelay.restart()
     }
   }
+
   property string playbackError: ""
   property bool switching: false
   property bool stopRequested: false
@@ -152,8 +176,9 @@ Item {
   }
 
   function setMusicRoot(path) {
-    var wanted = String(path || "~/Music").trim() || "~/Music"
+    var wanted = userMusicRoot || String(path || "~/Music").trim() || "~/Music"
     if (wanted === musicRoot) return
+    search("")
     musicRoot = wanted
     rootDirectory = ""
     directory = ""
@@ -179,28 +204,117 @@ Item {
   function search(query) {
     searchQuery = String(query || "").trim()
     searchResults = []
-    searchError = ""; searchTruncated = false
-    if (!searchQuery) {
-      searchResults = []; searchLoading = false
-      if (searchProcess.running) pendingSearch = " "
+    searchError = ""; searchTruncated = false; searchScanLimited = false
+    searchLoading = !!searchQuery
+    if (searchActive) {
+      pendingSearch = searchQuery || " "
+      searchProcess.running = false
       return
     }
-    searchLoading = true
-    if (searchProcess.running) { pendingSearch = searchQuery; return }
+    if (!searchQuery) return
     searchBody = ""
+    searchActive = true
     searchProcess.command = ["python3", pluginDir + "/scripts/browse.py", "search", musicRoot, searchQuery]
     searchProcess.running = true
   }
 
   function queueFolder(path, next) {
     if (!path) return
-    if (folderQueueProcess.running) {
-      pendingFolder = String(path); pendingFolderNext = next === true; return
-    }
-    folderQueueNext = next === true
+    folderRequests = folderRequests.concat([{path: String(path), next: next === true}])
+    notify("Adding folder…")
+    runFolderRequest()
+  }
+
+  function queueSelection(items, next) {
+    if (!items.length) return
+    folderRequests = folderRequests.concat([{items: items, next: next === true}])
+    notify("Adding selection…")
+    runFolderRequest()
+  }
+
+  function runFolderRequest() {
+    if (folderRequestActive || !folderRequests.length) return
+    var request = folderRequests[0]
+    folderRequests = folderRequests.slice(1)
+    folderRequestActive = true
+    folderQueueNext = request.next
     folderQueueBody = ""
-    folderQueueProcess.command = ["python3", pluginDir + "/scripts/browse.py", "tracks", musicRoot, String(path)]
+    selectionPayload = request.items ? JSON.stringify(request.items) : ""
+    folderQueueProcess.command = ["python3", pluginDir + "/scripts/browse.py", request.items ? "collect-stdin" : "tracks", musicRoot, request.items ? "-" : request.path]
     folderQueueProcess.running = true
+  }
+
+  function chooseMusicRoot(path) {
+    if (!String(path).trim()) return
+    userMusicRoot = String(path).trim()
+    setMusicRoot(userMusicRoot)
+    saveState()
+  }
+
+  function togglePin(path) {
+    if (!path) return
+    pinnedFolders = pinnedFolders.indexOf(path) >= 0
+      ? pinnedFolders.filter(function(p) { return p !== path }) : pinnedFolders.concat([path])
+    saveState()
+  }
+
+  function saveMixtape(name) {
+    name = String(name).trim()
+    if (!name || !queue.length) return false
+    if (mixtapes.some(function(t) { return t.name === name })) {
+      operationError = "A mixtape with that name already exists. Choose another name."
+      return false
+    }
+    mixtapes = mixtapes.concat([{name: name, paths: queue.slice(), created: Date.now()}])
+    saveState(); notify("Mixtape saved")
+    return true
+  }
+
+  function removeMixtape(index) {
+    mixtapes = mixtapes.filter(function(t, i) { return i !== index })
+    saveState()
+  }
+
+  function loadMixtape(index, start) {
+    var tape = mixtapes[index]
+    if (!tape || !tape.paths.length) return
+    if (start) playAlbum(tape.paths, 0)
+    else enqueueMany(tape.paths)
+  }
+
+  function checkpoint(label) {
+    undoStack = undoStack.slice(-19).concat([{
+      label: label, queue: queue.slice(), kinds: queueKinds.slice(), index: currentIndex,
+      position: positionSec, history: history.slice()
+    }])
+  }
+
+  function undoQueue() {
+    if (!undoStack.length) return
+    var snapshot = undoStack[undoStack.length - 1]
+    undoStack = undoStack.slice(0, -1)
+    var sameTrack = currentIndex >= 0 && snapshot.index >= 0 && queue[currentIndex] === snapshot.queue[snapshot.index]
+    if (!sameTrack) stop()
+    queueEditing()
+    queueKinds = snapshot.kinds
+    queue = snapshot.queue
+    currentIndex = snapshot.index
+    history = snapshot.history
+    if (!sameTrack) {
+      positionSec = snapshot.position
+      durationSec = 0; trackTitle = ""; artist = ""; album = ""
+      paused = true; resumePending = currentIndex >= 0
+    }
+    saveState(); notify("Undid " + snapshot.label)
+  }
+
+  function toggleMute() {
+    if (outputSink && outputSink.audio) outputSink.audio.muted = !outputSink.audio.muted
+  }
+
+  function retryPlayback() {
+    playbackError = ""
+    if (currentIndex >= 0) { paused = false; startTrack() }
   }
 
   function playFolder(path, startTrack) {
@@ -228,8 +342,14 @@ Item {
   function saveState() {
     if (!stateLoaded) return
     stateFile.setText(JSON.stringify({
-      version: 1,
+      version: 3,
+      userMusicRoot: userMusicRoot,
+      recentFolders: recentFolders,
+      pinnedFolders: pinnedFolders,
+      mixtapes: mixtapes,
+      history: history,
       queue: queue,
+      queueKinds: queueKinds,
       currentIndex: currentIndex,
       positionSec: positionSec,
       directory: directory,
@@ -237,42 +357,59 @@ Item {
     }, null, 2) + "\n")
   }
 
-  function enqueue(path) {
-    if (!path) return
-    var next = queue.slice()
-    next.push(String(path))
-    notify("Added to queue")
-    queueEditing()
-    queue = next
-    saveState()
+  function queueKind(index) {
+    return queueKinds[index] === "album" ? "album" : "queued"
   }
 
-  function playNext(path) {
-    if (!path) return
-    var next = queue.slice()
+  function explicitInsertIndex() {
     var index = currentIndex >= 0 ? currentIndex + 1 : 0
-    next.splice(index, 0, String(path))
-    notify("Playing next")
-    queueEditing()
-    queue = next
-    saveState()
+    while (index < queue.length && queueKind(index) !== "album") index++
+    return index
   }
 
-  function playNextMany(paths) {
+  function insertQueued(paths, index) {
+    paths = paths.filter(function(path) { return !!path }).map(String)
     if (!paths.length) return
-    var index = currentIndex >= 0 ? currentIndex + 1 : 0
-    notify(paths.length + " tracks playing next")
+    checkpoint("add tracks")
+    var kinds = queue.map(function(path, i) { return queueKind(i) })
     queueEditing()
+    queueKinds = kinds.slice(0, index).concat(paths.map(function() { return "queued" }), kinds.slice(index))
     queue = queue.slice(0, index).concat(paths, queue.slice(index))
     saveState()
   }
 
+  function enqueue(path) {
+    if (!path) return
+    insertQueued([path], explicitInsertIndex())
+    notify("Added to queue")
+  }
+
+  function playNext(path) {
+    if (!path) return
+    insertQueued([path], currentIndex >= 0 ? currentIndex + 1 : 0)
+    notify("Playing next")
+  }
+
+  function playNextMany(paths) {
+    if (!paths.length) return
+    insertQueued(paths, currentIndex >= 0 ? currentIndex + 1 : 0)
+    notify(paths.length + " tracks playing next")
+  }
+
   function shuffleQueue() {
+    if (upcomingCount < 2) return
+    checkpoint("shuffle")
     var start = currentIndex >= 0 ? currentIndex + 1 : 0
     var next = queue.slice()
-    for (var i = next.length - 1; i > start; i--) {
-      var j = start + Math.floor(Math.random() * (i - start + 1))
-      var item = next[i]; next[i] = next[j]; next[j] = item
+    // Shuffle each priority independently, keeping explicit songs first.
+    var boundary = explicitInsertIndex()
+    var ends = [boundary, next.length]
+    for (var group = 0; group < ends.length; group++) {
+      for (var i = ends[group] - 1; i > start; i--) {
+        var j = start + Math.floor(Math.random() * (i - start + 1))
+        var item = next[i]; next[i] = next[j]; next[j] = item
+      }
+      start = boundary
     }
     queueEditing()
     queue = next
@@ -280,27 +417,36 @@ Item {
   }
 
   function enqueueMany(paths) {
-    var next = queue.slice()
-    for (var i = 0; i < paths.length; i++) if (paths[i]) next.push(String(paths[i]))
-    if (next.length === queue.length) return
-    notify((next.length - queue.length) + " tracks added to queue")
-    queueEditing()
-    queue = next
-    saveState()
+    if (!paths.length) return
+    insertQueued(paths, explicitInsertIndex())
+    notify(paths.length + " tracks added to queue")
   }
 
   function playTrack(path) {
     if (!path) return
-    var index = currentIndex >= 0 ? currentIndex + 1 : 0
-    var next = queue.slice()
-    next.splice(index, 0, String(path))
-    queueEditing()
-    queue = next
-    playAt(index)
+    playFolder(String(path).slice(0, String(path).lastIndexOf("/")), String(path))
   }
 
-  function playAt(index) {
+  function playAlbum(paths, index) {
+    if (currentPath) history = history.concat([currentPath]).slice(-100)
+    undoStack = []
+    // A new playback context replaces automatic continuation, not user requests.
+    var explicit = []
+    for (var i = currentIndex >= 0 ? currentIndex + 1 : 0; i < queue.length; i++) {
+      if (queueKind(i) !== "album") explicit.push(queue[i])
+    }
+    var following = paths.slice(index + 1)
+    queueEditing()
+    queueKinds = ["album"].concat(explicit.map(function() { return "queued" }),
+      following.map(function() { return "album" }))
+    queue = [paths[index]].concat(explicit, following)
+    currentIndex = -1
+    playAt(0)
+  }
+
+  function playAt(index, remember) {
     if (index < 0 || index >= queue.length) return
+    if (remember !== false && currentPath && index !== currentIndex) history = history.concat([currentPath]).slice(-100)
     currentIndex = index
     paused = false
     positionSec = 0
@@ -388,6 +534,7 @@ Item {
   }
 
   function stop() {
+    startAfterStop.stop()
     stopRequested = true
     switching = false
     paused = false
@@ -401,9 +548,14 @@ Item {
     if (currentIndex < 0) { if (queue.length) playAt(0); return }
     // A finished or skipped track is consumed, including the final track.
     var index = currentIndex
+    history = history.concat([queue[index]]).slice(-100)
+    undoStack = []
     stop()
     var remaining = queue.slice()
+    var kinds = queue.map(function(path, i) { return queueKind(i) })
+    kinds.splice(index, 1)
     remaining.splice(index, 1)
+    queueKinds = kinds
     currentIndex = -1
     queueEditing()
     queue = remaining
@@ -413,16 +565,34 @@ Item {
   }
 
   function previous() {
-    if (positionSec > 3) seek(0)
-    else if (currentIndex > 0) playAt(currentIndex - 1)
+    var now = Date.now()
+    if (currentPath && positionSec > 3 && now - previousPressedAt > 1500) {
+      previousPressedAt = now
+      seek(0)
+      return
+    }
+    previousPressedAt = now
+    if (history.length) {
+      var path = history[history.length - 1]
+      history = history.slice(0, -1)
+      var index = Math.max(0, currentIndex)
+      queueEditing()
+      queueKinds = queueKinds.slice(0, index).concat(["queued"], queueKinds.slice(index))
+      queue = queue.slice(0, index).concat([path], queue.slice(index))
+      playAt(index, false)
+    } else if (currentIndex > 0) playAt(currentIndex - 1)
     else seek(0)
   }
 
   function removeQueueAt(index) {
     if (index < 0 || index >= queue.length) return
+    checkpoint("remove track")
     var wasCurrent = index === currentIndex
     var next = queue.slice()
+    var kinds = queue.map(function(path, i) { return queueKind(i) })
+    kinds.splice(index, 1)
     next.splice(index, 1)
+    queueKinds = kinds
     queueEditing()
     queue = next
     if (wasCurrent) {
@@ -439,24 +609,42 @@ Item {
   function moveQueue(index, delta) {
     var target = index + delta
     if (index < 0 || target < 0 || target >= queue.length) return
+    checkpoint("reorder")
     var next = queue.slice()
     var item = next.splice(index, 1)[0]
     next.splice(target, 0, item)
+    var kinds = queue.map(function(path, i) { return queueKind(i) })
+    var kind = kinds.splice(index, 1)[0]
+    kinds.splice(target, 0, kind)
+    var playingIndex = currentIndex
+    if (playingIndex === index) playingIndex = target
+    else if (index < playingIndex && target >= playingIndex) playingIndex--
+    else if (index > playingIndex && target <= playingIndex) playingIndex++
+    // Manual ordering makes the chosen prefix explicit, preserving that order.
+    if (index !== currentIndex) kinds[target] = "queued"
+    var lastExplicit = -1
+    for (var i = playingIndex + 1; i < kinds.length; i++) {
+      if (kinds[i] !== "album") lastExplicit = i
+    }
+    for (var j = playingIndex + 1; j <= lastExplicit; j++) kinds[j] = "queued"
+    queueKinds = kinds
     queueEditing()
     queue = next
-    if (currentIndex === index) currentIndex = target
-    else if (index < currentIndex && target >= currentIndex) currentIndex--
-    else if (index > currentIndex && target <= currentIndex) currentIndex++
+    currentIndex = playingIndex
     saveState()
   }
 
   function clearQueue() {
+    if (!queue.length) return
+    checkpoint("clear queue")
     if (currentIndex >= 0 && currentIndex < queue.length) {
       queueEditing()
+      queueKinds = [queueKind(currentIndex)]
       queue = [queue[currentIndex]]
       currentIndex = 0
     } else {
       queueEditing()
+      queueKinds = []
       queue = []
       currentIndex = -1
     }
@@ -540,8 +728,19 @@ Item {
     onLoaded: {
       try {
         var saved = JSON.parse(text())
+        root.userMusicRoot = typeof saved.userMusicRoot === "string" ? saved.userMusicRoot : ""
+        if (root.userMusicRoot) root.setMusicRoot(root.userMusicRoot)
+        root.recentFolders = Array.isArray(saved.recentFolders) ? saved.recentFolders.filter(function(p) { return typeof p === "string" }).slice(0, 8) : []
+        root.pinnedFolders = Array.isArray(saved.pinnedFolders) ? saved.pinnedFolders.filter(function(p) { return typeof p === "string" }) : []
+        root.history = Array.isArray(saved.history) ? saved.history.filter(function(p) { return typeof p === "string" }).slice(-100) : []
+        root.mixtapes = Array.isArray(saved.mixtapes) ? saved.mixtapes.filter(function(t) {
+          return t && typeof t.name === "string" && Array.isArray(t.paths) && t.paths.every(function(p) { return typeof p === "string" })
+        }) : []
         root.queueEditing()
         root.queue = Array.isArray(saved.queue) ? saved.queue.filter(function(p) { return typeof p === "string" }) : []
+        root.queueKinds = root.queue.map(function(path, i) {
+          return Array.isArray(saved.queueKinds) && saved.queueKinds[i] === "album" ? "album" : "queued"
+        })
         root.currentIndex = Number.isInteger(saved.currentIndex) && saved.currentIndex >= 0
           && saved.currentIndex < root.queue.length ? saved.currentIndex : -1
         root.positionSec = Math.max(0, Number(saved.positionSec) || 0)
@@ -579,6 +778,7 @@ Item {
           root.rootDirectory = String(result.root || "")
           root.directory = String(result.path || "")
           root.parentDirectory = String(result.parent || "")
+          root.recentFolders = [root.directory].concat(root.recentFolders.filter(function(p) { return p !== root.directory })).slice(0, 8)
           root.saveState()
         }
       } catch (e) {
@@ -596,10 +796,10 @@ Item {
       onStreamFinished: root.searchBody = String(text || "")
     }
     onExited: {
+      root.searchActive = false
       if (root.pendingSearch) {
-        var wanted = root.pendingSearch
         root.pendingSearch = ""
-        Qt.callLater(function() { root.search(wanted) })
+        Qt.callLater(function() { if (!root.searchActive) root.search(root.searchQuery) })
         return
       }
       root.searchLoading = false
@@ -607,6 +807,7 @@ Item {
         var result = JSON.parse(root.searchBody)
         root.searchResults = Array.isArray(result.entries) ? result.entries : []
         root.searchTruncated = result.truncated === true
+        root.searchScanLimited = result.scanLimited === true
         root.searchError = String(result.error || "")
       } catch (e) { root.searchResults = []; root.searchError = "Search failed" }
     }
@@ -615,6 +816,8 @@ Item {
   Process {
     id: folderQueueProcess
     running: false
+    stdinEnabled: true
+    onStarted: if (root.selectionPayload) write(root.selectionPayload + "\n")
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.folderQueueBody = String(text || "")
@@ -622,19 +825,17 @@ Item {
     onExited: {
       try {
         var result = JSON.parse(root.folderQueueBody)
-        if (result.error) root.directoryError = String(result.error)
+        if (result.error) root.operationError = String(result.error)
         else {
           var paths = result.entries.map(function(entry) { return entry.path })
           if (root.folderQueueNext) root.playNextMany(paths)
           else root.enqueueMany(paths)
+          if (!paths.length) root.operationError = "No playable tracks in this folder"
+          if (result.truncated) root.operationWarning = "Only the first 5,000 tracks were added. Add smaller subfolders to include the rest."
         }
-      } catch (e) { root.directoryError = "Could not queue this folder" }
-      if (root.pendingFolder) {
-        var wanted = root.pendingFolder
-        var next = root.pendingFolderNext
-        root.pendingFolder = ""
-        Qt.callLater(function() { root.queueFolder(wanted, next) })
-      }
+      } catch (e) { root.operationError = "Could not queue this folder" }
+      root.folderRequestActive = false
+      Qt.callLater(root.runFolderRequest)
     }
   }
 
@@ -649,21 +850,20 @@ Item {
       if (!root.pendingAlbum) {
         try {
           var result = JSON.parse(root.albumBody)
-          if (result.error) root.playbackError = String(result.error)
+          if (result.error) root.operationError = String(result.error)
           else {
             var paths = result.entries.map(function(entry) { return entry.path })
-            if (!paths.length) root.playbackError = "No playable tracks in this folder"
+            if (!paths.length) root.operationError = "No playable tracks in this folder"
             else {
               var index = root.albumStartTrack ? paths.indexOf(root.albumStartTrack) : 0
-              if (index < 0) root.playbackError = "Selected track is no longer in this folder"
+              if (index < 0) root.operationError = "Selected track is no longer in this folder"
               else {
-                root.queueEditing()
-                root.queue = paths
-                root.playAt(index)
+                root.playAlbum(paths, index)
+                if (result.truncated) root.operationWarning = "Album continuation includes only the first 5,000 tracks. Open a smaller subfolder for the rest."
               }
             }
           }
-        } catch (e) { root.playbackError = "Could not play this folder" }
+        } catch (e) { root.operationError = "Could not play this folder" }
       }
       if (root.pendingAlbum) {
         var wanted = root.pendingAlbum

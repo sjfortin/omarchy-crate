@@ -6,6 +6,17 @@ ShellRoot {
   QtObject {
     id: mock
     signal queueEditing()
+    property var history: []
+    property var mixtapes: []
+    property var recentFolders: []
+    property var pinnedFolders: []
+    property var visibleMetadataPaths: []
+    property bool canUndo: false
+    property bool addingFolders: false
+    property bool searchScanLimited: false
+    property string operationError: ""
+    property string operationWarning: ""
+    readonly property int upcomingCount: Math.max(0, queue.length - (currentIndex >= 0 ? currentIndex + 1 : 0))
     property var queue: []
     property int currentIndex: -1
     property bool playing: false
@@ -32,6 +43,7 @@ ShellRoot {
     property string playbackError: ""
     function browse(path) {}
     function search(query) { searchQuery = query }
+    function queueKind(index) { return "queued" }
     function queueTitle(path) { return path + " · Artist" }
     function removeQueueAt(index) { queueEditing(); var next = queue.slice(); next.splice(index, 1); queue = next }
   }
@@ -93,7 +105,47 @@ ShellRoot {
     onTriggered: {
       if (mock.queue.length !== 98 || list.contentY !== 1500 || browser.cursor !== 41) throw new Error("Keyboard viewport reset: " + list.contentY)
       console.log("PASS mouse action and keyboard removal preserve viewport and selection")
+      browser.helpOpen = true
+      var help = find(browser, "crateHelp")
+      if (!help || !help.visible || help.height > 710) throw new Error("Shortcut dialog failed")
+      browser.helpOpen = false
+      browser.navigate("files")
+      browser.cursor = 8
+      mock.queue = mock.queue.slice(0, 2)
+      if (browser.cursor !== 8) throw new Error("Queue edit changed Dig selection")
+      mock.entries = [{name:"one", path:"/one", kind:"track"}, {name:"two",path:"/two",kind:"track"}, {name:"three",path:"/three",kind:"track"}]
+      browser.toggleSelection(0, false)
+      browser.toggleSelection(2, true)
+      if (browser.selectedPaths.length !== 3) throw new Error("Range selection failed")
+      browser.cursor = 2
+      browser.navigate("queue")
+      browser.navigate("files")
+      if (browser.cursor !== 2) throw new Error("Page selection lost")
       browser.close()
+      realService.chooseMusicRoot(String(Quickshell.env("CRATE_TEST_MUSIC")))
+      realService.queueFolder(realService.musicRoot + "/one")
+      realService.queueFolder(realService.musicRoot + "/two")
+      realService.queueFolder(realService.musicRoot + "/three")
+      realService.search("one")
+      realService.search("two")
+      realService.search("three")
+      phase6.start()
+    }
+  }
+  Timer {
+    id: phase6; interval: 100; repeat: true
+    property int attempts: 0
+    onTriggered: {
+      if (++attempts > 80) throw new Error("Async pipeline timed out")
+      if (realService.addingFolders || realService.searchLoading || realService.directoryLoading) return
+      if (realService.queue.length !== 3 || !realService.queue[0].endsWith("one.mp3") || !realService.queue[1].endsWith("two.mp3") || !realService.queue[2].endsWith("three.mp3")) throw new Error("Folder request lost or reordered")
+      if (realService.searchQuery !== "three" || !realService.searchResults.some(function(e) { return e.name === "three.mp3" })) throw new Error("Stale search results")
+      realService.togglePin(realService.musicRoot)
+      if (!realService.saveMixtape("Test tape") || realService.mixtapes[0].paths.length !== 3) throw new Error("Mixtape failed")
+      realService.clearQueue()
+      realService.undoQueue()
+      if (realService.queue.length !== 3) throw new Error("Undo failed")
+      console.log("PASS folder pipeline, latest search, and persistence")
       Qt.quit()
     }
   }

@@ -1,4 +1,10 @@
-# Crate
+<p align="center">
+  <img src="assets/crate.svg" alt="Crate vinyl record icon" width="80" height="80">
+</p>
+
+<h1 align="center">Crate</h1>
+
+<p align="center"><strong>Dig → Queue → Play</strong></p>
 
 A fast, minimal local music player for Omarchy. Your filesystem is your music
 library: open Crate, dig through your folders, build a queue, and get back to
@@ -12,22 +18,30 @@ work. No import or account is needed.
   across your collection. Search matches tracks and folders, including artist
   and album names when they appear in the path. Fuzzy matches help with partial
   names. Search for an artist such as Radiohead, then click the folder result
-  or its **OPEN** button to see the albums. Change the root in the bar widget's
-  **Music folder** setting.
+  or choose **Open folder** from its **⋯** menu to see the albums. Choose the root from Crate's **Settings → Music folder**. This saved choice takes
+  precedence over the bar widget's default **Music folder** setting.
 - **Queue:** Add a track or a whole folder (including its subfolders), play it
   next, reorder or remove items, clear the queue, or shuffle what comes next.
 - **Play:** Use previous, play/pause, next, seek, system output volume.
   Crate shows track title, artist, and album when mpv provides that metadata;
   filenames work when tags are missing.
 
-Click a track or its **PLAY** button to play only that track while keeping the
-rest of your queue. Finished and skipped tracks are removed, including the final
-track; add them again to replay. Queue rows show title and artist from tags, with
-an artist-folder fallback when tags are missing. Mouse and keyboard deletion
-keep the queue at the same scroll position.
-On a folder row, click **PLAY** to play the whole folder; click its name to
-open it and keep digging. Playing a folder replaces the current queue. Use
-**+ QUEUE** or **NEXT** when you want to keep what is already queued.
+Click a track or choose **Play now** from its **⋯** menu to play it and continue with the following
+tracks in its album folder. The queue labels these automatic entries **ALBUM**.
+Tracks added with **+ QUEUE** or **Q** are labeled **QUEUED** and play before
+album continuation, in the order you added them. **Play next** in the **⋯** menu or **Shift+Q** inserts
+immediately after the current song, ahead of other requests.
+Playing another track or folder replaces album continuation and preserves your
+explicit requests. Folder **Play now** starts at its first track. Queueing a folder
+adds all its tracks as explicit requests. Manually moving album entries gives
+the reordered prefix explicit priority; shuffle keeps the two priorities separate.
+Finished and skipped tracks are removed, including the final track. The last
+100 played/skipped tracks remain in playback history. Previous restarts a song
+after three seconds; pressing it again within 1.5 seconds goes back. History
+also works after the final song finishes. Queue rows
+show title and artist from tags, with an artist-folder fallback when tags are
+missing. Mouse and keyboard deletion keep the same scroll position.
+On a folder row, click its name to open it and keep digging.
 The path above the file list is a set of breadcrumbs: click any folder name
 there to jump back to it. Drag the path sideways when it is wider than the
 window.
@@ -82,7 +96,8 @@ same record mark appears in the bar and browser, colored by the active theme.
 The installer refuses to replace an existing launcher or icon with different
 contents. Removal deletes only files that still match Crate's shipped files;
 edited or unrelated files are left in place.
-The bar also has previous, play/pause, and next buttons. Click the title or mark
+The bar also has previous, play/pause, and next buttons. The bar keeps a fixed **CRATE** label and record mark; the mark dims when
+paused or stopped. Track details appear in the hover tooltip. Click the label or mark
 to open Crate; middle-click there to play/pause, or scroll to change volume.
 The player shows elapsed time and total track length beneath the seek bar.
 
@@ -90,7 +105,7 @@ The player shows elapsed time and total track length beneath the seek bar.
 
 | Key | Action |
 | --- | --- |
-| `1` / `2` | Dig / Queue |
+| `1` / `2` / `3` | Dig / Queue / Mixtapes |
 | `↑` / `↓` or `j` / `k` | Move selection |
 | `Shift+j` / `Shift+k` in Dig | Jump to the next letter / start of this or the previous letter group |
 | `←` / `h` | Parent folder |
@@ -102,6 +117,11 @@ The player shows elapsed time and total track length beneath the seek bar.
 | `Space` | Play or pause |
 | `Shift+j` / `Shift+k` or `Ctrl+↓` / `Ctrl+↑` in Queue | Move selected queue item down / up |
 | `Delete` / `Backspace` | Remove selected queue item |
+| `Ctrl+Z` | Undo a queue edit |
+| `Ctrl+A` in Dig | Select all visible entries |
+| `Ctrl+click` / `Shift+click` | Toggle selection / select a range |
+| `Tab` / `Shift+Tab` | Focus controls |
+| Arrow keys on the seek slider | Seek |
 | `?` | Shortcut help |
 
 **CLEAR OTHERS** removes every queued track except the current one, which keeps playing.
@@ -109,8 +129,8 @@ The player shows elapsed time and total track length beneath the seek bar.
 While typing a search, press `↓` or `Tab` to move focus to the results. Digits and punctuation remain ordinary search text. Returning to Dig keeps
 the search results visible with focus on keyboard navigation.
 
-Use **QUEUE THIS FOLDER** to add the current folder and its subfolders. Search
-runs only when requested; Crate does not build a separate music database.
+Use **QUEUE FOLDER** to add the current folder and its subfolders. Search
+runs only when requested and cancels obsolete scans; Crate does not build a separate music database.
 Search currently uses filenames and folder paths, so metadata that appears
 only inside file tags is not indexed. Large collections may take longer on the
 first search. Accent-insensitive matching supports searches such as `bjork`
@@ -127,9 +147,35 @@ Ogg, Opus, AAC/M4A, WAV, and other formats supported by mpv. It does not
 change your music files.
 
 Crate is intentionally queue first. Accounts, streaming, recommendations,
-ratings, and large library-management screens are outside its scope. A future
-**Save Queue → Mixtape** feature may add simple persistent collections after
-the browsing and listening flow is solid.
+ratings, and large library-management screens are outside its scope.
+
+## Queue, folders, and mixtapes
+
+- Use row checkboxes, Ctrl+click, or Shift+click to select tracks and folders,
+  then **Queue selected** or **Next**. Folder additions are processed in order;
+  quick repeated clicks are retained. Collection limits produce visible warnings.
+- **Undo** / `Ctrl+Z` reverses up to 20 additions, removals, reorders, shuffles,
+  or clears during the session. Restoring a removed current track leaves it
+  paused at its saved position. Moving to the next song or starting a new
+  album clears the undo history.
+- **Queue → Save Mixtape** stores the current queue under a unique name.
+  **Mixtapes** can queue or play that saved list; deleting it leaves music files
+  untouched. Renaming or moving source files can make saved entries unavailable.
+- **Pin** keeps the current folder in **Folders**, alongside the eight most
+  recently opened folders. Pins, recent folders, mixtapes, the chosen music root,
+  and playback history are saved with the queue.
+- Dig and Queue remember their selection and scroll position while the browser
+  instance remains loaded. Reopening keeps the search text. Shell restarts
+  restore the last folder, but not transient search or selection state.
+- Drag or click anywhere in the seek slider's 24-pixel interaction area. Hover
+  to see the destination time. System volume includes a mute toggle.
+- Playback failures remain visible with Retry/Skip when a current track is
+  available. Empty screens offer a way back to browsing or folder selection.
+
+Queue tags stream into the UI one track at a time in small batches, prioritizing
+current and visible tracks. Search still reads filenames and paths without a
+persistent index. Result limits and incomplete collection scans are reported
+separately.
 
 To turn it off, run `omarchy plugin disable sjfortin.crate`. For a Git-installed
 plugin, `omarchy plugin remove sjfortin.crate` removes plugin files. Saved queue

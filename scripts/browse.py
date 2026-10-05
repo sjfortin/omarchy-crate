@@ -70,10 +70,10 @@ def normalize(text: str) -> str:
                    if not unicodedata.combining(c))
 
 
-def score_match(query: str, relative: str) -> float:
+def score_match(query: str, relative: str, parts=None) -> float:
     text = normalize(relative)
     name = normalize(os.path.basename(relative))
-    parts = normalize(query).split()
+    parts = normalize(query).split() if parts is None else parts
     if not parts:
         return 0
     score = 0.0
@@ -108,6 +108,7 @@ def search_music(root_arg: str, query: str) -> dict:
     if not query:
         return {"error": "", "entries": [], "truncated": False}
     matches = []
+    parts = normalize(query).split()
     scanned = 0
     root_path = str(root)
     root_prefix = root_path.rstrip(os.sep) + os.sep
@@ -124,7 +125,7 @@ def search_music(root_arg: str, query: str) -> dict:
                 continue
             scanned += 1
             relative = path[len(root_prefix):]
-            score = score_match(query, relative)
+            score = score_match(query, relative, parts)
             if score:
                 matches.append((score, relative.casefold(), {
                     "name": name, "path": path, "kind": kind,
@@ -136,7 +137,8 @@ def search_music(root_arg: str, query: str) -> dict:
             break
     matches.sort(key=lambda item: (-item[0], item[1]))
     return {"error": "", "entries": [item[2] for item in matches[:MAX_RESULTS]],
-            "truncated": scanned >= MAX_SEARCH_FILES or len(matches) > MAX_RESULTS}
+            "truncated": len(matches) > MAX_RESULTS,
+            "scanLimited": scanned >= MAX_SEARCH_FILES}
 
 
 def tracks_in_folder(root_arg: str, folder_arg: str) -> dict:
@@ -165,7 +167,7 @@ def tracks_in_folder(root_arg: str, folder_arg: str) -> dict:
     return result
 
 
-def queue_metadata(root_arg: str, paths_arg: str) -> dict:
+def queue_metadata(root_arg: str, paths_arg: str, stream=False) -> dict:
     """Read tags off the UI thread; restrict probes to local library audio."""
     root = Path(os.path.expanduser(root_arg)).resolve()
     metadata = {}
@@ -179,6 +181,8 @@ def queue_metadata(root_arg: str, paths_arg: str) -> dict:
             metadata[original] = {}
             path = Path(original).resolve()
             if not path.is_relative_to(root) or path.suffix.lower() not in AUDIO_EXTENSIONS or not path.is_file():
+                if stream:
+                    print(json.dumps({"metadata": {original: {}}}), flush=True)
                 continue
             try:
                 result = subprocess.run(
@@ -191,16 +195,50 @@ def queue_metadata(root_arg: str, paths_arg: str) -> dict:
                                       if k.lower() in {"title", "artist", "album"}}
             except (OSError, ValueError, subprocess.TimeoutExpired):
                 pass
+            if stream:
+                print(json.dumps({"metadata": {original: metadata[original]}}, ensure_ascii=False), flush=True)
         return {"error": "", "metadata": metadata}
     except (OSError, ValueError, RuntimeError) as error:
         return {"error": str(error), "metadata": metadata}
 
 
+def collect_selection(root_arg: str, entries_arg: str) -> dict:
+    root = Path(os.path.expanduser(root_arg)).resolve()
+    tracks = []
+    limited = False
+    try:
+        entries = json.loads(entries_arg)
+        for entry in entries:
+            path = Path(entry["path"]).resolve()
+            if not path.is_relative_to(root):
+                return {"error": "Folder is outside the music library", "entries": []}
+            if entry["kind"] == "folder":
+                result = tracks_in_folder(root_arg, str(path))
+                if result.get("error"):
+                    return result
+                tracks.extend(result["entries"])
+                limited = limited or result.get("truncated", False)
+            elif path.is_file() and path.suffix.lower() in AUDIO_EXTENSIONS:
+                tracks.append({"name": path.name, "path": str(path), "kind": "track"})
+            else:
+                return {"error": "A selected track is no longer available", "entries": []}
+            if len(tracks) > MAX_ENTRIES:
+                limited = True
+                break
+        return {"error": "", "entries": tracks[:MAX_ENTRIES], "truncated": limited}
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
+        return {"error": str(error), "entries": []}
+
+
 if __name__ == "__main__":
-    if len(sys.argv) != 4 or sys.argv[1] not in {"list", "search", "tracks", "metadata"}:
-        print(json.dumps({"error": "usage: browse.py {list|search|tracks|metadata} ROOT ARG", "entries": []}))
+    modes = {"list": list_folder, "search": search_music, "tracks": tracks_in_folder,
+             "metadata": queue_metadata, "collect": collect_selection,
+             "collect-stdin": lambda root, _: collect_selection(root, sys.stdin.readline()),
+             "metadata-stream": lambda root, paths: queue_metadata(root, paths, stream=True)}
+    if len(sys.argv) != 4 or sys.argv[1] not in modes:
+        print(json.dumps({"error": "usage: browse.py MODE ROOT ARG", "entries": []}))
         sys.exit(2)
-    result = {"list": list_folder, "search": search_music,
-              "tracks": tracks_in_folder, "metadata": queue_metadata}[sys.argv[1]](sys.argv[2], sys.argv[3])
-    print(json.dumps(result, ensure_ascii=False))
+    result = modes[sys.argv[1]](sys.argv[2], sys.argv[3])
+    if sys.argv[1] != "metadata-stream":
+        print(json.dumps(result, ensure_ascii=False))
     sys.exit(1 if result["error"] else 0)

@@ -53,7 +53,7 @@ BarWidget {
       if (root.service) root.service.setVolume(root.service.volume + (wheel.angleDelta.y > 0 ? 5 : -5))
     }
     onEntered: if (root.bar) root.bar.showTooltip(root, root.service
-      ? root.service.displayTitle + "\nClick to browse · middle-click to play/pause"
+      ? root.service.displayTitle + "\nClick to browse · middle-click to play/pause · scroll for system volume"
       : "Crate")
     onExited: if (root.bar) root.bar.hideTooltip(root)
   }
@@ -70,7 +70,7 @@ BarWidget {
       height: width
       ink: root.ink
       paper: root.paper
-      opacity: root.service && root.service.playing ? 1 : 0.72
+      opacity: root.service && root.service.playing ? 1 : 0.4
     }
 
     Text {
@@ -82,25 +82,13 @@ BarWidget {
       font.bold: true
     }
 
-    Text {
-      anchors.verticalCenter: parent.verticalCenter
-      visible: root.service && root.service.currentPath !== ""
-      width: Math.min(160, implicitWidth)
-      text: root.service ? (root.service.trackTitle || root.service.currentTitle) : ""
-      textFormat: Text.PlainText
-      color: Util.alpha(root.ink, 0.7)
-      font.family: root.bar ? root.bar.fontFamily : Style.font.family
-      font.pixelSize: Style.font.bodySmall
-      elide: Text.ElideRight
-    }
-
     Row {
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.space(2)
       TransportButton {
         icon: "󰒮"
         hint: "Previous track"
-        available: root.service && root.service.currentIndex >= 0
+        available: root.service && (root.service.currentIndex >= 0 || root.service.history.length > 0)
         onActivated: root.service.previous()
       }
       TransportButton {
@@ -129,12 +117,12 @@ BarWidget {
       height: width
       ink: root.ink
       paper: root.paper
-      opacity: root.service && root.service.playing ? 1 : 0.72
+      opacity: root.service && root.service.playing ? 1 : 0.4
     }
     TransportButton {
       icon: "󰒮"
       hint: "Previous track"
-      available: root.service && root.service.currentIndex >= 0
+      available: root.service && (root.service.currentIndex >= 0 || root.service.history.length > 0)
       onActivated: root.service.previous()
     }
     TransportButton {

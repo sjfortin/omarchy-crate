@@ -3,11 +3,14 @@ import json
 import shutil
 import subprocess
 import unittest
+import io
+from contextlib import redirect_stdout
+from unittest.mock import patch
 from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from browse import list_folder, search_music, tracks_in_folder, queue_metadata
+from browse import list_folder, search_music, tracks_in_folder, queue_metadata, collect_selection
 
 
 class BrowseTests(unittest.TestCase):
@@ -90,6 +93,46 @@ class BrowseTests(unittest.TestCase):
             self.assertEqual(result["metadata"][str(track)]["title"], "Tagged title")
             self.assertEqual(result["metadata"][str(track)]["artist"], "Tagged artist")
             self.assertEqual(result["metadata"][str(external)], {})
+
+    def test_search_reports_result_limit_separately_from_scan_limit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for name in ("one.mp3", "two.mp3", "three.mp3"):
+                (Path(directory) / name).touch()
+            with patch("browse.MAX_RESULTS", 1):
+                result = search_music(directory, "mp3")
+                self.assertTrue(result["truncated"])
+                self.assertFalse(result["scanLimited"])
+            with patch("browse.MAX_SEARCH_FILES", 1):
+                result = search_music(directory, "absent")
+                self.assertTrue(result["scanLimited"])
+                self.assertFalse(result["truncated"])
+
+    def test_collection_preserves_selection_order_and_reports_partial_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            folder = root / "Album"
+            folder.mkdir()
+            (folder / "01.mp3").touch()
+            (folder / "02.mp3").touch()
+            (root / "first.mp3").touch()
+            selection = json.dumps([{"path": str(root / "first.mp3"), "kind": "track"}, {"path": str(folder), "kind": "folder"}])
+            result = collect_selection(directory, selection)
+            self.assertEqual([t["name"] for t in result["entries"]], ["first.mp3", "01.mp3", "02.mp3"])
+            with patch("browse.MAX_ENTRIES", 2):
+                result = collect_selection(directory, selection)
+                self.assertEqual(len(result["entries"]), 2)
+                self.assertTrue(result["truncated"])
+            invalid = collect_selection(directory, json.dumps([{"path": "/outside.mp3", "kind": "track"}]))
+            self.assertTrue(invalid["error"])
+
+    def test_metadata_stream_reports_each_missing_track(self):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = [str(Path(directory) / "one.mp3"), str(Path(directory) / "two.mp3")]
+            output = io.StringIO()
+            with redirect_stdout(output):
+                queue_metadata(directory, json.dumps(paths), stream=True)
+            lines = [json.loads(line) for line in output.getvalue().splitlines()]
+            self.assertEqual([list(line["metadata"])[0] for line in lines], paths)
 
     def test_album_tracks_follow_natural_order(self):
         with tempfile.TemporaryDirectory() as directory:
