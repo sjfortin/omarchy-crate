@@ -46,12 +46,13 @@ ShellRoot {
     property string currentPath: ""
     property string notice: ""
     property string playbackError: ""
+    property string queueTitleOverride: ""
     function browse(path) {}
     function search(query) { searchQuery = query }
     function setSearchKind(kind) { searchKind = kind }
     function startIndex(force) {}
     function queueKind(index) { return "queued" }
-    function queueTitle(path) { return path + " · Artist" }
+    function queueTitle(path) { return queueTitleOverride || path + " · Artist" }
     function removeQueueAt(index) { queueEditing(); var next = queue.slice(); next.splice(index, 1); queue = next }
   }
   Crate.Browser { id: browser; service: mock }
@@ -66,6 +67,7 @@ ShellRoot {
       console.log("PASS final track consumption; system volume=" + realService.volume)
       var tracks = []
       for (var i = 0; i < 100; i++) tracks.push("Track " + i)
+      mock.queueTitleOverride = '<img src="https://attacker.example/pixel">'
       mock.queue = tracks
       browser.open('{"page":"queue"}')
       phase2.start()
@@ -85,6 +87,10 @@ ShellRoot {
     onTriggered: {
       list = find(browser, "crateQueue")
       if (!list) throw new Error("Queue list missing")
+      var tip = find(list, "crateQueueTip0")
+      if (!tip || tip.contentItem.textFormat !== Text.PlainText || tip.contentItem.text.indexOf("<img") !== 0)
+        throw new Error("Queue tooltip must render untrusted tags as plain text")
+      console.log("PASS queue tooltip renders metadata as plain text")
       list.contentY = 1500
       phase3.start()
     }

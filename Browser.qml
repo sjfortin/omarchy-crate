@@ -510,9 +510,11 @@ Item {
                         root.restoreKeyboardFocus()
                       }
                     }
-                    ToolTip.visible: rowMouse.containsMouse
-                    ToolTip.delay: 700
-                    ToolTip.text: fileRow.modelData.name + "\n" + fileRow.modelData.path
+                    PlainTip {
+                      visible: rowMouse.containsMouse
+                      delay: 700
+                      text: fileRow.modelData.name + "\n" + fileRow.modelData.path
+                    }
                   }
                   Action {
                     label: "+ QUEUE"
@@ -581,7 +583,12 @@ Item {
                       CrateLabel { color: root.dimInk; font.pixelSize: Style.font.caption; text: root.service && root.service.currentIndex === queueRow.index ? (root.service.playing ? "NOW PLAYING" : "PAUSED") : root.service && queueRow.index < root.service.currentIndex ? "EARLIER IN QUEUE" : root.service && root.service.queueKind(queueRow.index) === "album" ? "ALBUM CONTINUATION" : "QUEUED" }
                     }
                     MouseArea { id: queueMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.cursor = queueRow.index; root.service.playAt(queueRow.index); root.restoreKeyboardFocus() } }
-                    ToolTip.visible: queueMouse.containsMouse; ToolTip.delay: 700; ToolTip.text: root.service ? root.service.queueTitle(queueRow.modelData) + "\n" + queueRow.modelData : ""
+                    PlainTip {
+                      objectName: "crateQueueTip" + queueRow.index
+                      visible: queueMouse.containsMouse
+                      delay: 700
+                      text: root.service ? root.service.queueTitle(queueRow.modelData) + "\n" + queueRow.modelData : ""
+                    }
                   }
                   Action { label: "↑"; hint: "Move track up"; enabled: queueRow.index > 0; onActivated: root.service.moveQueue(queueRow.index, -1) }
                   Action { label: "↓"; hint: "Move track down"; enabled: !!root.service && queueRow.index < root.service.queue.length - 1; onActivated: root.service.moveQueue(queueRow.index, 1) }
@@ -751,6 +758,7 @@ Item {
     font.family: Style.font.family
     font.pixelSize: Style.font.bodySmall
     color: root.ink
+    textFormat: Text.PlainText
   }
   component Action: Button {
     id: action
@@ -767,11 +775,29 @@ Item {
     Keys.priority: Keys.AfterItem
     Keys.forwardTo: [keyCatcher]
     onClicked: activated()
-    ToolTip.visible: hovered && hint !== ""
-    ToolTip.delay: 600
-    ToolTip.text: hint
+    PlainTip {
+      visible: action.hovered && action.hint !== ""
+      delay: 600
+      text: action.hint
+    }
     contentItem: Text { id: caption; text: action.label; textFormat: Text.PlainText; color: action.strong ? root.paper : root.ink; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; elide: Text.ElideMiddle; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true }
     background: Rectangle { color: action.strong ? root.ink : action.hovered ? Util.alpha(root.ink, 0.1) : "transparent"; border.width: action.activeFocus ? 2 : 1; border.color: action.activeFocus ? root.ink : root.ruleColor; opacity: action.enabled ? 1 : 0.4 }
     opacity: enabled ? 1 : 0.45
+  }
+
+  component PlainTip: ToolTip {
+    id: tip
+    popupType: Popup.Item
+    x: (parent.width - width) / 2
+    y: -height
+    padding: 8
+    contentItem: Text {
+      text: tip.text
+      textFormat: Text.PlainText
+      color: root.ink
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+    }
+    background: Rectangle { color: root.paper; border.width: 1; border.color: root.ruleColor }
   }
 }
